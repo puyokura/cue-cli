@@ -18,7 +18,11 @@ jobs:
         run: |
           ./target/release/cue help  > /dev/null
           ./target/release/cue version
+      - name: documented counts match the files
+        run: python3 tests/check_docs.py
+
       - name: smoke (network)
         run: python3 tests/run_smoke.py ./target/release/cue
         continue-on-error: true
+
 
