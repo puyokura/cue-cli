@@ -366,3 +366,14 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 
 `agents_20_monthly` は「月 20 ドルの Agents プラン」と読めるが、`source: invitation` なので
 招待による付与であり、課金の発生は確認していない。
+
+### 食い違いの切り分け（推測を実測に置き換え）
+
+Web クライアントの判定関数 `isVip(version)` は `getMembershipVersion(userInfo.membershipVersion)`
+だけを見て、`Free` 以外を有料とみなす。つまり**プラン表示に使われるのは `UserInfo` 側だけ**で、
+`SubscriptionService` 側の `membershipVersion` は別系統として扱われている。
+
+- `UserInfo.membershipVersion: free` → 表示上は無料プラン
+- `SubscriptionService.GetAgentsMembership.membershipVersion: plus` → Agents のクレジット枠の区分
+- 両者は同じ名前だが、Web は前者しか見ない。フィールド名の一致は仕様の一致ではない
+
