@@ -889,3 +889,19 @@ pub fn sandbox(session_id: Option<&String>) -> Result<String, String> {
     })))
 }
 
+
+/// `cue webdev` — list WebDev projects (read-only).
+pub fn webdev(limit: Option<&String>) -> Result<String, String> {
+    let token = authed()?;
+    let origin = base();
+    let n = limit
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(20);
+    let value = client::call_json(
+        &origin,
+        "/webdev.v1.WebDevService/ListWebDevProjects",
+        Some(&token),
+        &json!({ "limit": n }),
+    )?;
+    Ok(pretty(&redact(&value)))
+}

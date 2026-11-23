@@ -213,8 +213,27 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 | Python | `3.12.3` |
 | ネットワーク | `curl https://example.com` が `200` |
 | sandboxUpdate | `sandboxId`, `status: running`, `vncUrl`（`wss://5901-…/vnc`）, `webRTCUrl` が返る |
-| VNC の WebRTC 面 | `HEAD` で 502。WebSocket は未接続 |
+| VNC の WebRTC 面 | `HEAD` で 502 |
+| VNC ブリッジ | `wss://…/vnc` に WebSocket を張ると `400 Bad Request: Failed to parse password`。`password=` / `p=` / `token=` のクエリ、`Authorization: Bearer`、`Cookie` のいずれも同じ。`sandboxUpdate` は `vncUrl` のみでパスワードを含まない |
+| `StartScreenLive` | 403 `device_authorization_source_unavailable`（読み取り前段で拒否） |
 | `GET /api/chat/getSandboxStatus` | 403 Permission denied 10002（別認可が要る） |
 
 沙箱の中の操作は通る。VNC の画面転送そのものは未接続で、そこは未検証。
 `cue sandbox <session_id>` で sandboxId / vncUrl / webRTCUrl を読める（読み取り専用）。
+
+
+## WebDev の実測（2026-11-23）
+
+エージェント経由で指示し、静的サイトの生成まで通った。デプロイは未実行。
+
+| 項目 | 実測 |
+|---|---|
+| プロジェクト生成 | 依頼すると `WebDevService/ListWebDevProjects` に 1 件現れる（`projectUid` 22 文字） |
+| プレビュー URL | `https://<port>-<id>.<region>.manus.computer/` に 200 で到達。要求した文字列 `cue-webdev-ok` が HTML に含まれる（368,080 B） |
+| プロジェクト種別 | `WEB_DEV_PROJECT_TYPE_STATIC` |
+| 公開状態 | `WEB_DEV_PUBLICATION_STATE_DRAFT`（未デプロイ） |
+| 割当ドメイン | `<name>.manus.space` が割り当てられるが、デプロイ前は 404 |
+| デプロイ RPC | `webdev.v1.WebDevService/DeployWebDevProject {project_id}` が存在（空ボディで `400 project_id is required`） |
+
+「作成 → プレビュー確認」までは実測で通る。**「デプロイ（公開）」は `DeployWebDevProject` を
+呼ぶ必要があり、状態変更なので本人確認なしに実行していない。**

@@ -224,6 +224,10 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 15h. `webdev` rejects a non-numeric --limit locally
+    rc, out, err = run(["webdev", "--limit", "abc"], env_extra=env)
+    check("webdev with a bad limit fails", rc != 0, out)
+
     # 15g. `sandbox` requires a session id and fails cleanly without one
     rc, out, err = run(["sandbox"], env_extra=env, )
     check("sandbox without id fails", rc != 0, out)
@@ -280,6 +284,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

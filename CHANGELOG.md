@@ -10,7 +10,7 @@
 - 対話ログイン `cue login`（電話番号 + SMS コード）を追加。
 - `cue phone start|verify|password|reset`、`cue mfa ...`、`cue join`、`cue send`、
   `cue watch`、`cue coverage`、`cue discover` を追加。
-- `cue sandbox <session_id>`: 沙箱の sandboxId / 状態 / VNC / WebRTC の URL を読む（読み取り専用）。- `cue new --text`: セッション ID をローカル生成して新規セッションを開始する（サーバは ID を発行しない）。- `cue mcp`: stdio の MCP サーバー。`initialize` / `tools/list` / `tools/call` を実装し、11 ツールを公開する。遅いツールが読み取りループを塞がない。- Socket.IO（Engine.IO v4）クライアントを実装。`join_session` と `user_message` を送出し、
+- `cue webdev [--limit n]`: WebDev プロジェクトの一覧（読み取り専用）。- `cue sandbox <session_id>`: 沙箱の sandboxId / 状態 / VNC / WebRTC の URL を読む（読み取り専用）。- `cue new --text`: セッション ID をローカル生成して新規セッションを開始する（サーバは ID を発行しない）。- `cue mcp`: stdio の MCP サーバー。`initialize` / `tools/list` / `tools/call` を実装し、11 ツールを公開する。遅いツールが読み取りループを塞がない。- Socket.IO（Engine.IO v4）クライアントを実装。`join_session` と `user_message` を送出し、
   `chat` / `chatDelta` / `statusUpdate` / `liveStatus` を受信する。
 
 ### 新機能
@@ -23,10 +23,12 @@
 ### 注意点
 
 - **未検証（環境）**: Unix の 0700/0600 設定は Windows ホストのため未コンパイル・未実行（CI の Linux ジョブで実測される）。
-- **未検証（機能）**: 沙箱の起動と操縦、telecom の実番号契約、webdev のデプロイ、
+- **未検証（機能）**: 沙箱の中の操作は通るが VNC の画面転送は未達（ブリッジが password を要求し、発行元が公開面に無い）、telecom の実番号契約、webdev のデプロイ、
   cloud_pc の生成、2FA の TOTP 登録（サーバが 400279 で拒否）、パスキー登録の完了（端末の認証器が要る）。
 - 認証は電話 + SMS のみ実測済み。メールは Turnstile、Google は実トークンが前提で未検証。
 - 本リポジトリは非公式の独立実装。サービスの規約は利用者自身の責任で確認すること。
+
+
 
 
 
