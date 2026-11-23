@@ -38,7 +38,7 @@ Commands:
   phone password --number <n>       log in with a phone number and password
                                      (password is read from stdin when omitted)
   phone reset --id <v> --code <c>    set a new password (read from stdin)
-  mfa <status|totp-start|totp-finish|enable|disable|codes|login-methods|passkeys>
+  mfa <status|totp-start|totp-finish|enable|disable|codes|login-methods|passkeys|passkey-start|passkey-finish|passkey-delete>
                                      two-step verification management (needs a token)
   logout                              remove stored token
   whoami                              user.v1.UserService/UserInfo
@@ -148,6 +148,7 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 

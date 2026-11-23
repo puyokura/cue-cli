@@ -156,3 +156,32 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 沙箱の起動・操縦（`startSandbox` / VNC 接続）は状態変更を伴うため未実行。本人確認待ち。
 
 
+
+## パスキー登録の CLI 対応
+
+`cue mfa passkey-start|passkey-finish|passkey-delete` を追加した。
+
+### 実測した契約
+
+- `StartPasskeyRegistration{}` → `{flowId（22文字）, optionsJson}`
+- `optionsJson` の中身（実測）:
+  - `rp = {name:"Manus", id:"manus.im"}`
+  - `user = {name, displayName, id}`（id は base64 風の 22 文字）
+  - `challenge` 43 文字
+  - `pubKeyCredParams` 10 種（ES256(-7), -35, -36, RS256(-257), -258, -259, -37, -38, -39, -8）
+  - `authenticatorSelection = {requireResidentKey:true, residentKey:"required", userVerification:"required"}`
+  - `attestation: "indirect"`、`timeout: 300000`
+- `FinishPasskeyRegistration{flowId, credentialJson, name?}` → `{passkey}`
+  - `credentialJson` は WebAuthn の `credential.toJSON()` を文字列化したもの
+- `DeletePasskey{id}`、`RenamePasskey{id, name}`
+
+### エラーコード
+
+- `1051` Passkey challenge expired, please try again（flow は使い捨て。1 回失敗すると無効）
+- `1052`（形状不正な credential で返る。詳細メッセージは取得できていない）
+
+### 完了に必要なもの
+
+`residentKey: "required"` かつ `userVerification: "required"` なので、
+登録には端末のプラットフォーム認証器（Windows Hello / Touch ID / セキュリティキー）が要る。
+CLI 単体では完結しない。CLI は flow 発行と、端末が生成した credential JSON の送出までを担う。

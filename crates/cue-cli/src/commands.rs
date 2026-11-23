@@ -495,6 +495,9 @@ pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<Stri
                 "cue mfa codes",
                 "cue mfa login-methods",
                 "cue mfa passkeys",
+                "cue mfa passkey-start",
+                "cue mfa passkey-finish --flow <id> --credential <json> [--name <label>]",
+                "cue mfa passkey-delete --id <passkey id>",
             ],
         })
         .to_string());
@@ -571,6 +574,52 @@ pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<Stri
                 "/user.v1.UserAuthService/ListPasskeys",
                 Some(&token),
                 &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "passkey-start" => {
+            // Mints a WebAuthn challenge. Nothing is registered until `passkey-finish`.
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/StartPasskeyRegistration",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "passkey-finish" => {
+            let flow = flags
+                .get("flow")
+                .ok_or("mfa passkey-finish requires --flow <flowId>")?;
+            let credential = flags
+                .get("credential")
+                .ok_or("mfa passkey-finish requires --credential <credential JSON from the authenticator>")?;
+            let parsed: Value = serde_json::from_str(credential)
+                .map_err(|e| format!("--credential is not valid JSON: {e}"))?;
+            let mut body = json!({
+                "flow_id": flow,
+                "credential_json": parsed.to_string(),
+            });
+            if let Some(name) = flags.get("name") {
+                body["name"] = Value::from(name.as_str());
+            }
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/FinishPasskeyRegistration",
+                Some(&token),
+                &body,
+            )?;
+            Ok(pretty(&value))
+        }
+        "passkey-delete" => {
+            let id = flags
+                .get("id")
+                .ok_or("mfa passkey-delete requires --id <passkey id>")?;
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/DeletePasskey",
+                Some(&token),
+                &json!({ "id": id }),
             )?;
             Ok(pretty(&value))
         }
@@ -703,5 +752,6 @@ fn describe(value: &Value) -> Value {
         other => json!(other.to_string()),
     }
 }
+
 
 

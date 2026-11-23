@@ -80,8 +80,30 @@ fn connect_error(status: u16, body: &str) -> String {
     match serde_json::from_str::<Value>(body) {
         Ok(v) => {
             let code = v.get("code").and_then(Value::as_str).unwrap_or("-");
-            let message = v.get("message").and_then(Value::as_str).unwrap_or("-");
-            format!("HTTP {status} [{code}] {message}")
+            // The service wraps its real reason in `details[].debug.message` and puts only
+            // an opaque `Error<NNNN>` in `message`. Prefer the debug message when present.
+            let mut message = v.get("message").and_then(Value::as_str).unwrap_or("-").to_string();
+            let mut detail_code: Option<String> = None;
+            if let Some(details) = v.get("details").and_then(Value::as_array) {
+                for d in details {
+                    if let Some(debug) = d.get("debug") {
+                        if let Some(m) = debug.get("message").and_then(Value::as_str) {
+                            if !m.is_empty() {
+                                message = m.to_string();
+                                detail_code = debug
+                                    .get("code")
+                                    .and_then(Value::as_str)
+                                    .map(|c| c.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            match detail_code {
+                Some(dc) => format!("HTTP {status} [{code}/{dc}] {message}"),
+                None => format!("HTTP {status} [{code}] {message}"),
+            }
         }
         Err(_) => format!("HTTP {status}: {}", truncate(body, 300)),
     }
@@ -169,4 +191,5 @@ fn truncate(s: &str, max: usize) -> String {
 pub fn empty() -> Value {
     json!({})
 }
+
 

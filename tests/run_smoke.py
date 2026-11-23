@@ -174,6 +174,16 @@ def main():
     check("mfa status without token fails", rc != 0, out)
     check("mfa status explains the missing token", "no token" in err, err)
 
+    # 15a. server errors must carry the service's own reason, not only Error<NNNN>.
+    #      Uses a token-free call so the check is independent of a stored login.
+    rc, out, err = run(
+        ["rpc", "user.v1.UserAuthPublicService/Oauth2Authorize", "--json", '{"type":5}'],
+        env_extra=env,
+    )
+    check("server error surfaces its message", "Facebook login has been discontinued" in err,
+          err[:160])
+    check("server error keeps the service code", "400228" in err, err[:160])
+
     # 15. interactive `login` must not hang or send an SMS when given no input.
     #     It reads the phone number from stdin; EOF has to fail fast instead.
     rc, out, err = run(["login"], env_extra=env, stdin_data="")
@@ -189,3 +199,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
