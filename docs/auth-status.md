@@ -280,3 +280,16 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 
 `Create` / `Deploy` / `Register` のような動詞の API は、必須フィールドを探る目的でも
 **検証を通れば副作用が起きる**。契約調査は、値を入れずに 400 を読む段階で止める。
+
+### 削除経路の調査結果
+
+`cloud_pc.v1.CloudPCService` に削除系は無い（`Delete` / `Destroy` / `Remove` / `Terminate` /
+`Abort` / `Cancel` ほか 10 名を存在判定して全て 404）。Web クライアントは代わりに
+`user.v1.SubscriptionService/StripeCloudComputerCancel {pcId, cancel: true}` を呼ぶ。
+
+- 空ボディ → `400 pc_id is required`
+- `pcId` のみ（`cancel` 未指定）→ 存在しない ID なら `404 cloud computer not found`
+  ＝ フィールドは解決され、対象の実在確認まで到達する
+- 実在する pcId を渡すと解約が走る可能性があるため、実 ID では実行していない
+
+つまり解除は CLI から可能。実 ID に対する実行は状態変更なので承認待ち。
