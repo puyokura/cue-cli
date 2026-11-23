@@ -10,12 +10,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: build
+      - name: build from the repository root
         run: cargo build --release --locked
       - name: unit tests
         run: cargo test --locked
-      - name: cli help
-        run: ./target/release/cue help || true
+      - name: cli help and version (exit codes are part of the contract)
+        run: |
+          ./target/release/cue help  > /dev/null
+          ./target/release/cue version
       - name: smoke (network)
         run: python3 tests/run_smoke.py ./target/release/cue
         continue-on-error: true
+
