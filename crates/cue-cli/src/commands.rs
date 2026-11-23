@@ -73,9 +73,9 @@ pub fn login(token: Option<&String>, base: Option<&String>) -> Result<String, St
 
     let dir = crate::state_dir()?;
     let path = dir.join("token");
-    fs::write(&path, token).map_err(|e| format!("write {}: {e}", path.display()))?;
+    crate::write_state(&path, token)?;
     let base_path = dir.join("base");
-    fs::write(&base_path, &origin).map_err(|e| format!("write {}: {e}", base_path.display()))?;
+    crate::write_state(&base_path, &origin)?;
 
     Ok(pretty(&json!({
         "stored": path.display().to_string(),
@@ -100,9 +100,9 @@ fn store_verified_token(origin: &str, token: &str) -> Result<Value, String> {
         .map_err(|e| format!("token rejected, nothing stored: {e}"))?;
     let dir = crate::state_dir()?;
     let path = dir.join("token");
-    fs::write(&path, token).map_err(|e| format!("write {}: {e}", path.display()))?;
+    crate::write_state(&path, token)?;
     let base_path = dir.join("base");
-    fs::write(&base_path, origin).map_err(|e| format!("write {}: {e}", base_path.display()))?;
+    crate::write_state(&base_path, origin)?;
     Ok(user)
 }
 
@@ -752,6 +752,7 @@ fn describe(value: &Value) -> Value {
         other => json!(other.to_string()),
     }
 }
+
 
 
 

@@ -12,10 +12,20 @@ import os
 import subprocess
 import sys
 
-BIN = os.path.join("target", "release",
-                   "cue.exe" if os.name == "nt" else "cue")
-if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
-    BIN = sys.argv[1]
+_EXE = "cue.exe" if os.name == "nt" else "cue"
+
+
+def _default_bin():
+    for profile in ("release", "debug"):
+        candidate = os.path.join("target", profile, _EXE)
+        if os.path.exists(candidate):
+            return candidate
+    raise SystemExit("no binary found; run `cargo build --release`")
+
+
+BIN = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else _default_bin()
+if not os.path.exists(BIN):
+    raise SystemExit(f"binary not found: {BIN}")
 CREATE_SESSION = "--create-session" in sys.argv
 
 results = []
@@ -162,5 +172,6 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 

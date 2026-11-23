@@ -77,25 +77,81 @@ fn main() {
     if args.is_empty() {
         usage();
     }
-    let cmd = args[0].as_str();
-    let rest = &args[1..];
 
+    // Global flags may precede the command (`cue --state DIR --version`).
     let mut flags: HashMap<String, String> = HashMap::new();
-    let mut positional: Vec<String> = Vec::new();
     let mut i = 0;
-    while i < rest.len() {
-        let a = &rest[i];
-        if let Some(name) = a.strip_prefix("--") {
-            if i + 1 < rest.len() && !rest[i + 1].starts_with("--") {
-                flags.insert(name.to_string(), rest[i + 1].clone());
+    while i < args.len() {
+        let a = &args[i];
+        match a.strip_prefix("--") {
+            Some(name) if name == "state" && i + 1 < args.len() && !args[i + 1].starts_with("--") => {
+                flags.insert("state".to_string(), args[i + 1].clone());
                 i += 2;
+            }
+            Some(name) if name == "version" => {
+                flags.insert("version".to_string(), "true".to_string());
+                i += 1;
+            }
+            _ => break,
+        }
+    }
+    let remaining = &args[i..];
+    if remaining.is_empty() {
+        if flags.contains_key("version") {
+            println!("cue {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        usage();
+    }
+    let cmd = remaining[0].as_str();
+    let rest = &remaining[1..];
+
+    let mut positional: Vec<String> = Vec::new();
+    let mut j = 0;
+    while j < rest.len() {
+        let a = &rest[j];
+        if let Some(name) = a.strip_prefix("--") {
+            if j + 1 < rest.len() && !rest[j + 1].starts_with("--") {
+                flags.insert(name.to_string(), rest[j + 1].clone());
+                j += 2;
             } else {
                 flags.insert(name.to_string(), "true".to_string());
-                i += 1;
+                j += 1;
             }
         } else {
             positional.push(a.clone());
-            i += 1;
+            j += 1;
+        }
+    }
+
+    // `--state` redirects the state directory before anything reads it.
+    if let Some(dir) = flags.get("state") {
+        // Safety: this runs before any other thread exists.
+        std::env::set_var("CUE_STATE", dir);
+    }
+
+    // Reject flags a command does not implement: silently ignoring them makes a
+    // mistyped option look accepted.
+    let allowed: &[&str] = match cmd {
+        "login" => &["token", "base", "state"],
+        "phone" => &["number", "purpose", "id", "code", "password", "state"],
+        "mfa" => &["flow", "code", "credential", "name", "id", "state"],
+        "join" => &["seconds", "frames", "locale", "verbose", "state"],
+        "send" => &["text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
+                    "country-iso", "verbose", "state"],
+        "watch" => &["seconds", "frames", "locale", "state"],
+        "sessions" | "agents" => &["limit", "state"],
+        "rpc" => &["json", "state"],
+        "raw" => &["bytes", "state"],
+        _ => &["state"],
+    };
+    if !allowed.is_empty() {
+        for name in flags.keys() {
+            if !allowed.contains(&name.as_str()) {
+                eprintln!("error: unknown flag --{name} for `cue {cmd}`");
+                eprintln!("allowed: {}", allowed.iter().map(|f| format!("--{f}")).collect::<Vec<_>>().join(", "));
+                std::process::exit(2);
+            }
         }
     }
 
@@ -118,6 +174,7 @@ fn main() {
         "discover" => commands::discover(positional.first(), &positional[1..].to_vec()),
         "coverage" => commands::coverage(),
         "methods" => commands::methods(),
+        "version" | "--version" | "-V" => Ok(format!("cue {}", env!("CARGO_PKG_VERSION"))),
         "--help" | "-h" | "help" => {
             usage_ok();
         }
@@ -141,7 +198,16 @@ fn main() {
 }
 
 /// Directory that holds CLI state. Created on demand by `login`.
+///
+/// Overrides, in order: `CUE_STATE` (directory), then `--state` handled by the
+/// caller; otherwise the OS config directory.
 pub fn state_dir() -> Result<PathBuf, String> {
+    if let Some(dir) = env::var_os("CUE_STATE") {
+        let dir = PathBuf::from(dir);
+        fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+        restrict(&dir)?;
+        return Ok(dir);
+    }
     let base = if cfg!(windows) {
         env::var_os("APPDATA").map(PathBuf::from)
     } else {
@@ -149,16 +215,43 @@ pub fn state_dir() -> Result<PathBuf, String> {
             .map(PathBuf::from)
             .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
     };
-    let base = base.ok_or("cannot locate a config directory (set APPDATA or XDG_CONFIG_HOME)")?;
+    let base = base.ok_or("cannot locate a config directory (set APPDATA, XDG_CONFIG_HOME or CUE_STATE)")?;
     let dir = base.join("cue-cli");
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+    restrict(&dir)?;
     Ok(dir)
+}
+
+/// Tighten permissions on Unix: directory 0700, files 0600. A no-op elsewhere.
+fn restrict(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = if path.is_dir() { 0o700 } else { 0o600 };
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+            .map_err(|e| format!("chmod {}: {e}", path.display()))?;
+    }
+    let _ = path;
+    Ok(())
+}
+
+/// Write a state file atomically with restrictive permissions.
+/// A partially written token file would be worse than none.
+pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String> {
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, contents).map_err(|e| format!("write {}: {e}", tmp.display()))?;
+    restrict(&tmp)?;
+    fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
+    restrict(path)?;
+    Ok(())
 }
 
 /// Pretty-print a JSON value with stable ordering.
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
+
 
 
 

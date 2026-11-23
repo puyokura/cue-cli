@@ -195,6 +195,20 @@ def main():
           err[:160])
     check("server error keeps the service code", "400228" in err, err[:160])
 
+    # 15c. unknown flags must be rejected, and version must work
+    rc, out, err = run(["whoami", "--bogus"], env_extra=env)
+    check("unknown flag is rejected", rc == 2, f"rc={rc}")
+    check("unknown flag names the flag", "--bogus" in err, err[:120])
+    rc, out, err = run(["version"], env_extra=env)
+    check("version prints the crate version", rc == 0 and out.startswith("cue "), out[:80])
+    rc, out, err = run(["--version"], env_extra=env)
+    check("--version works before the command", rc == 0 and out.startswith("cue "), out[:80])
+
+    # 15d. --state must redirect state without touching the default directory
+    tmp_state = os.path.join(tempfile.mkdtemp(prefix="cue-state-"), "s")
+    rc, out, err = run(["--state", tmp_state, "whoami"], env_extra=env)
+    check("--state redirects state", rc != 0 and "no token" in err, err[:120])
+
     # 15b. explicit help is a success, misuse is an error
     for flag in (["help"], ["--help"], ["-h"]):
         rc, out, err = run(flag, env_extra=env)
@@ -215,6 +229,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

@@ -52,7 +52,21 @@ cue mfa totp-finish --flow <id> --code <6桁>
 cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在判定
 ```
 
-`--base` もしくは `CUE_BASE_URL`、`CUE_WS_URL` で接続先を差し替えられる。
+接続先は `--base`、`CUE_BASE_URL`、`CUE_WS_URL` で差し替えられる。
+
+### 状態ファイル
+
+トークンは OS 標準の設定ディレクトリに置く。
+
+| OS | 保存先 |
+|---|---|
+| Windows | `%APPDATA%\cue-cli\` |
+| macOS / Linux | `$XDG_CONFIG_HOME/cue-cli/`（未設定なら `~/.config/cue-cli/`） |
+
+上書きは `--state <dir>` または環境変数 `CUE_STATE`。書き込みは一時ファイル + rename で行い、
+Unix ではディレクトリ `0700`・ファイル `0600` に設定する（この実装は Linux で未実行。
+CI の Linux ジョブで初めて実測される）。トークンの値は標準出力・エラー・`--json` の
+いずれにも出さない（存在と長さのみ）。
 
 ## 認証について（実測）
 
@@ -88,6 +102,9 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+
+
 
 
 
