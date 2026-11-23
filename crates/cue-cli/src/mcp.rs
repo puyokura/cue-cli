@@ -63,6 +63,9 @@ fn tools() -> Value {
             "text": { "type": "string" },
             "seconds": { "type": "integer", "description": "observation window" }
         }), vec!["session_id", "text"]),
+        tool("cue_sandbox", "Report a session's sandbox status, id and VNC endpoints.", json!({
+            "session_id": { "type": "string" }
+        }), vec!["session_id"]),
         tool("cue_new", "Start a new session (the client generates the id).", json!({
             "text": { "type": "string" },
             "seconds": { "type": "integer" }
@@ -131,6 +134,10 @@ fn call_tool(name: &str, args: &Value) -> Result<String, String> {
             }
             flags.insert("frames".to_string(), "160".to_string());
             crate::commands::send(Some(&sid.to_string()), Some(&text.to_string()), &flags)
+        }
+        "cue_sandbox" => {
+            let sid = arg_str(args, "session_id").ok_or("session_id is required")?;
+            crate::commands::sandbox(Some(&sid.to_string()))
         }
         "cue_new" => {
             let text = arg_str(args, "text").ok_or("text is required")?;

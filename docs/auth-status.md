@@ -200,3 +200,21 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 トークンを入れているため。フィールド名だけで安全と判断しない。
 
 回帰は `tests/run_smoke.py` の「no token leak」3 件と、ユニットテスト 3 件で固定している。
+
+## 沙箱の実測（2026-11-23）
+
+`cue new` でセッションを作り、そのセッションでエージェントに作業を指示して沙箱を動かした。
+状態変更の REST をこちらから叩くのではなく、**サービス本来の経路**（プロンプト）で実行している。
+
+| 項目 | 実測 |
+|---|---|
+| 沙箱の OS | `Linux <host> 6.18.38+ #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux` |
+| ファイル作成と読み取り | `/tmp/cue-probe.txt` に `cue-ok` を書き、`cat` で `cue-ok` を取得 |
+| Python | `3.12.3` |
+| ネットワーク | `curl https://example.com` が `200` |
+| sandboxUpdate | `sandboxId`, `status: running`, `vncUrl`（`wss://5901-…/vnc`）, `webRTCUrl` が返る |
+| VNC の WebRTC 面 | `HEAD` で 502。WebSocket は未接続 |
+| `GET /api/chat/getSandboxStatus` | 403 Permission denied 10002（別認可が要る） |
+
+沙箱の中の操作は通る。VNC の画面転送そのものは未接続で、そこは未検証。
+`cue sandbox <session_id>` で sandboxId / vncUrl / webRTCUrl を読める（読み取り専用）。

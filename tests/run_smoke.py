@@ -224,6 +224,11 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 15g. `sandbox` requires a session id and fails cleanly without one
+    rc, out, err = run(["sandbox"], env_extra=env, )
+    check("sandbox without id fails", rc != 0, out)
+    check("sandbox names the missing id", "<session_id>" in err, err[:120])
+
     # 15f. `new` validates its arguments before touching the network
     rc, out, err = run(["new"], env_extra=env)
     check("new without --text fails", rc != 0, out)
@@ -275,6 +280,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

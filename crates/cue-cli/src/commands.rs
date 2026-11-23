@@ -844,3 +844,48 @@ pub fn new_session(text: Option<&String>, flags: &HashMap<String, String>) -> Re
     let out = send(Some(&id), Some(text), &forwarded)?;
     Ok(format!("sessionId={id}\n{out}"))
 }
+
+/// `cue sandbox <session_id>` — report the session's sandbox state and endpoints.
+///
+/// Read-only: reads the session record and does not start or touch the sandbox.
+pub fn sandbox(session_id: Option<&String>) -> Result<String, String> {
+    let session_id = session_id.ok_or("sandbox requires <session_id>")?;
+    let token = authed()?;
+    let origin = base();
+
+    // GetSession does not carry the sandbox block; getSessionV2 does, including the
+    // latest `sandboxUpdate` event with vncUrl / webRTCUrl.
+    let detail = client::get_rest(
+        &origin,
+        &format!("/api/chat/getSessionV2?sessionId={session_id}"),
+        Some(&token),
+    )?;
+    let data = detail.get("data").cloned().unwrap_or(Value::Null);
+
+    let mut sandbox: Option<Value> = None;
+    if let Some(segments) = data.get("segments").and_then(Value::as_array) {
+        for segment in segments {
+            if let Some(events) = segment.get("events").and_then(Value::as_array) {
+                for event in events {
+                    if event.get("type").and_then(Value::as_str) == Some("sandboxUpdate") {
+                        sandbox = Some(event.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(pretty(&json!({
+        "sessionUid": session_id,
+        "title": data.get("title").cloned().unwrap_or(Value::Null),
+        "userStatus": data.get("userStatus").cloned().unwrap_or(Value::Null),
+        "executionTarget": data.get("executionTarget").cloned().unwrap_or(Value::Null),
+        "sandboxId": sandbox.as_ref().and_then(|s| s.get("sandboxId")).cloned().unwrap_or(Value::Null),
+        "sandboxStatus": sandbox.as_ref().and_then(|s| s.get("status")).cloned().unwrap_or(Value::Null),
+        "deviceId": sandbox.as_ref().and_then(|s| s.get("deviceId")).cloned().unwrap_or(Value::Null),
+        "vncUrl": sandbox.as_ref().and_then(|s| s.get("vncUrl")).cloned().unwrap_or(Value::Null),
+        "webRTCUrl": sandbox.as_ref().and_then(|s| s.get("webRTCUrl")).cloned().unwrap_or(Value::Null),
+        "hasSandboxEvent": sandbox.is_some(),
+    })))
+}
+

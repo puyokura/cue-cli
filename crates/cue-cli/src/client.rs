@@ -10,7 +10,7 @@
 //! failures in the body (`{"code":"...","message":"..."}`), so the status must
 //! be read alongside the payload.
 
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::fs;
 use std::time::Duration;
 
@@ -188,8 +188,41 @@ fn truncate(s: &str, max: usize) -> String {
 
 /// Convenience: an empty JSON object.
 #[allow(dead_code)]
-pub fn empty() -> Value {
-    json!({})
+/// GET one REST route under `/api/*` with the stored token.
+/// These routes are not Connect RPC and return plain JSON.
+pub fn get_rest(base: &str, path_and_query: &str, token: Option<&str>) -> Result<Value, String> {
+    use std::time::Duration;
+    let url = format!("{base}{path_and_query}");
+    let mut request = agent()
+        .get(&url)
+        .header("accept", "application/json")
+        .header("x-product-name", PRODUCT_NAME)
+        .header("x-client-type", "CUE")
+        .header("x-client-version", "1.2.0");
+    if let Some(t) = token {
+        request = request.header("authorization", &format!("Bearer {t}"));
+    }
+    let response = request
+        .config()
+        .timeout_global(Some(Duration::from_secs(60)))
+        .build()
+        .call()
+        .map_err(|e| format!("GET {path_and_query}: {e}"))?;
+    let status = response.status().as_u16();
+    let body = response
+        .into_body()
+        .read_to_string()
+        .map_err(|e| format!("read {path_and_query}: {e}"))?;
+    if status >= 400 {
+        return Err(format!("HTTP {status}: {}", truncate(&body, 200)));
+    }
+    serde_json::from_str(&body).map_err(|e| format!("decode {path_and_query}: {e}"))
 }
+
+
+
+
+
+
 
 
