@@ -293,3 +293,30 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 - 実在する pcId を渡すと解約が走る可能性があるため、実 ID では実行していない
 
 つまり解除は CLI から可能。実 ID に対する実行は状態変更なので承認待ち。
+
+### 本人判断: 解約しない（2026-11-23）
+
+2 台は `PC_STATUS_WAIT_PAYMENT` のまま放置する。課金は発生していない（`totalCredits` 1300 不変）。
+解除の手段は `user.v1.SubscriptionService/StripeCloudComputerCancel {pcId, cancel:true}`
+であることは実測済みで、必要になった時点で実行できる。
+
+## Telecom の実測（2026-11-23）
+
+法人向け電話番号そのものは未契約だが、読み取り面は実データで通る。
+
+| 面 | 実測 |
+|---|---|
+| `ListSupportedCountries` | 200。14 か国。JP は voice あり、US は sms/voice とも true |
+| `GetCallRates` | 200。`countryCode: JP`、`builtinLineCreditsPerMinute: 40`、`localCallCreditsPerMinute: 41.4` |
+| `GetFreePhoneSettings` | 200。`freePhoneAvailable: true`、`showMyNumber: true` |
+| `UpdateFreePhoneSettings {showMyNumber:true}` | 200。設定は変化なし（既定値と同じ） |
+| `RequestPhoneAvailability` | 200。`countryCode: JP`、`registered: true` |
+| `ListPhoneInfo` | 200（`{}`。番号の契約は 0 件） |
+| `GetPhoneInfo {phoneNumber}` | 403 `phone number not owned by user`（他者の番号は読めない） |
+| `ListCallHistory` | 200（`{}`・履歴 0 件） |
+| `StartScreenLive` | 403 `device_authorization_source_unavailable` |
+
+無料電話は `freePhoneAvailable: true` なので有効化できる可能性があるが、
+有効化は状態変更であり、また番号の割当を伴うため実行していない。
+`RequestPhoneAvailability` が `registered: true` を返すのは、国単位の可用性フラグであり、
+アカウントに番号が割り当て済みという意味ではない（`ListPhoneInfo` は 0 件）。

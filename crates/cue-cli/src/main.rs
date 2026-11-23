@@ -66,6 +66,7 @@ Commands:
   send <session_id> --text <prompt>   join an existing session and post a prompt
   new --text <prompt>                 start a new session (id is generated locally)
   sandbox <session_id>                report the sandbox state for a session (read-only)
+  telecom                             read telecom countries, rates, settings (read-only)
   webdev [--limit n] [--detail <id>]  list WebDev projects or read one (read-only)
   webdev-deploy --project <id> --version <id>
                                       publish a WebDev project to its public domain
@@ -145,6 +146,7 @@ fn main() {
         "phone" => &["number", "purpose", "id", "code", "password", "state"],
         "mfa" => &["flow", "code", "credential", "name", "id", "state"],
         "join" => &["seconds", "frames", "locale", "verbose", "state"],
+        "telecom" => &["state"],
         "webdev" => &["limit", "detail", "state"],
         "webdev-deploy" => &["project", "version", "state"],
         "sandbox" => &["state"],
@@ -185,6 +187,7 @@ fn main() {
         "send" => commands::send(positional.first(), flags.get("text"), &flags),
         "new" => commands::new_session(flags.get("text"), &flags),
         "sandbox" => commands::sandbox(positional.first()),
+        "telecom" => commands::telecom(),
         "webdev" => {
             if let Some(pid) = flags.get("detail") {
                 commands::webdev_detail(Some(pid))
@@ -274,6 +277,7 @@ pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String>
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 

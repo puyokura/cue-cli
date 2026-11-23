@@ -224,6 +224,10 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 15j. `telecom` requires a token and fails cleanly without one
+    rc, out, err = run(["telecom"], env_extra=env)
+    check("telecom without token fails", rc != 0 and "no token" in err, err[:120])
+
     # 15i. `webdev-deploy` requires both identifiers before touching the network
     rc, out, err = run(["webdev-deploy"], env_extra=env)
     check("webdev-deploy needs --project", rc != 0 and "--project" in err, err[:120])
@@ -290,6 +294,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

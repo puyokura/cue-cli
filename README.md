@@ -47,6 +47,7 @@ cue whoami
 cue sessions --limit 20
 cue new --text "やあ"         # 新規セッション（ID はクライアントが生成）
 cue sandbox <session_id>      # 沙箱の状態と VNC/WebRTC の URL（読み取り専用）
+cue telecom                   # 対応国・通話レート・無料電話設定（読み取り専用）
 cue webdev [--limit n]        # WebDev プロジェクト一覧（読み取り専用）
 cue webdev --detail <id>      # チェックポイント（versionId）を含む詳細
 cue webdev-deploy --project <id> --version <vid>   # 公開ドメインへデプロイ（外部公開）
@@ -134,6 +135,7 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
 
 
 

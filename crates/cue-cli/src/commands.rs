@@ -707,6 +707,9 @@ pub fn coverage() -> Result<String, String> {
         ("phone numbers", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
         ("remote control", "/device_authorization.v1.DeviceAuthorizationService/ListRemoteControlGrants", json!({})),
         ("agent emails", "/telecom.v1.TelecomService/ListAgentEmails", json!({})),
+        ("telecom countries", "/telecom.v1.TelecomService/ListSupportedCountries", json!({})),
+        ("call rates", "/telecom.v1.TelecomService/GetCallRates", json!({})),
+        ("free phone", "/telecom.v1.TelecomService/GetFreePhoneSettings", json!({})),
         ("email namespace", "/telecom.v1.TelecomService/GetAgentEmailNamespace", json!({})),
         ("cloud pc regions", "/cloud_pc.v1.CloudPCService/ListAvailableRegions", json!({})),
         ("webdev projects", "/webdev.v1.WebDevService/ListWebDevProjects", json!({"limit":10})),
@@ -989,3 +992,33 @@ mod redaction_suffix_tests {
         assert_eq!(r["note"], "keep");
     }
 }
+
+/// `cue telecom` — read the telecom surface (countries, rates, free-phone settings).
+///
+/// Read-only. Phone-number provisioning is a separate, state-changing operation
+/// and is deliberately not part of this command.
+pub fn telecom() -> Result<String, String> {
+    let token = authed()?;
+    let origin = base();
+
+    let mut out = serde_json::Map::new();
+    for (label, path, body) in [
+        ("countries", "/telecom.v1.TelecomService/ListSupportedCountries", json!({})),
+        ("rates", "/telecom.v1.TelecomService/GetCallRates", json!({})),
+        ("freePhoneSettings", "/telecom.v1.TelecomService/GetFreePhoneSettings", json!({})),
+        ("phoneInfo", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
+        ("callHistory", "/telecom.v1.TelecomService/ListCallHistory", json!({"limit": 10})),
+        ("agentEmails", "/telecom.v1.TelecomService/ListAgentEmails", json!({})),
+    ] {
+        match client::call_json(&origin, path, Some(&token), &body) {
+            Ok(v) => {
+                out.insert(label.to_string(), redact(&v));
+            }
+            Err(e) => {
+                out.insert(label.to_string(), json!({ "error": e }));
+            }
+        }
+    }
+    Ok(pretty(&Value::Object(out)))
+}
+
