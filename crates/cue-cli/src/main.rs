@@ -23,7 +23,19 @@ mod phone;
 mod session;
 mod socket;
 
+/// Print usage and exit 0 (explicit help request).
+fn usage_ok() -> ! {
+    usage_body();
+    std::process::exit(0)
+}
+
+/// Print usage and exit 2 (misuse: no command, unknown command).
 fn usage() -> ! {
+    usage_body();
+    std::process::exit(2)
+}
+
+fn usage_body() {
     eprintln!(
         "cue {version}
 
@@ -58,7 +70,6 @@ Commands:
 ",
         version = env!("CARGO_PKG_VERSION")
     );
-    std::process::exit(2)
 }
 
 fn main() {
@@ -108,7 +119,7 @@ fn main() {
         "coverage" => commands::coverage(),
         "methods" => commands::methods(),
         "--help" | "-h" | "help" => {
-            usage();
+            usage_ok();
         }
         other => {
             eprintln!("unknown command: {other}");
@@ -148,6 +159,7 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 

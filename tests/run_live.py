@@ -12,7 +12,7 @@ import os
 import subprocess
 import sys
 
-BIN = os.path.join("crates", "cue-cli", "target", "release",
+BIN = os.path.join("target", "release",
                    "cue.exe" if os.name == "nt" else "cue")
 if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
     BIN = sys.argv[1]
@@ -162,4 +162,5 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

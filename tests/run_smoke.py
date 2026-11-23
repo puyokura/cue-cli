@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-    "crates", "cue-cli", "target", "debug",
+    "target", "debug",
     "cue.exe" if os.name == "nt" else "cue",
 )
 
@@ -184,6 +184,11 @@ def main():
           err[:160])
     check("server error keeps the service code", "400228" in err, err[:160])
 
+    # 15b. explicit help is a success, misuse is an error
+    for flag in (["help"], ["--help"], ["-h"]):
+        rc, out, err = run(flag, env_extra=env)
+        check(f"`{flag[0]}` exits 0", rc == 0, f"rc={rc}")
+
     # 15. interactive `login` must not hang or send an SMS when given no input.
     #     It reads the phone number from stdin; EOF has to fail fast instead.
     rc, out, err = run(["login"], env_extra=env, stdin_data="")
@@ -199,4 +204,6 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
 

@@ -25,10 +25,10 @@ Cue（`ai.manus.agents`）の API を独立クライアントから扱うため�
 ## 使い方（CLI）
 
 ```
-cargo build --release --manifest-path crates/cue-cli/Cargo.toml
+cargo build --release
 
 # ログインは 1 プロセスで完結する（引数なしで対話入力）
-crates/cue-cli/target/release/cue login
+target/release/cue login
 #   phone number (E.164, e.g. +819012345678): <番号を入力>
 #   SMS code: <届いた 6 桁を入力>
 #   -> トークンを検証してから保存し、user を表示する
@@ -70,7 +70,7 @@ cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在
 
 ```
 python tests/run_smoke.py                               # 40/40 PASS
-cargo test --manifest-path crates/cue-cli/Cargo.toml    # 12/12 PASS
+cargo test                                 # 13/13 PASS
 ```
 
 実バイナリを別プロセスで起動し、公開 RPC の応答、proto コーデック、
@@ -88,5 +88,6 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
 
 
