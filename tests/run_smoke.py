@@ -13,10 +13,21 @@ import subprocess
 import sys
 import tempfile
 
-BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-    "target", "debug",
-    "cue.exe" if os.name == "nt" else "cue",
-)
+_EXE = "cue.exe" if os.name == "nt" else "cue"
+
+
+def _default_bin():
+    """Prefer the debug build for fast iteration, then the release build."""
+    for profile in ("debug", "release"):
+        candidate = os.path.join("target", profile, _EXE)
+        if os.path.exists(candidate):
+            return candidate
+    raise SystemExit("no binary found; run `cargo build` or pass the path explicitly")
+
+
+BIN = sys.argv[1] if len(sys.argv) > 1 else _default_bin()
+if not os.path.exists(BIN):
+    raise SystemExit(f"binary not found: {BIN}")
 
 results = []
 
@@ -204,6 +215,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
