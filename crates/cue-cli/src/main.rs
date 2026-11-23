@@ -37,6 +37,8 @@ Commands:
   phone password --number <n>       log in with a phone number and password
                                      (password is read from stdin when omitted)
   phone reset --id <v> --code <c>    set a new password (read from stdin)
+  mfa <status|totp-start|totp-finish|enable|disable|codes|login-methods|passkeys>
+                                     two-step verification management (needs a token)
   logout                              remove stored token
   whoami                              user.v1.UserService/UserInfo
   settings                            user.v1.UserPublicService/GetGlobalSettings (no auth)
@@ -86,6 +88,7 @@ fn main() {
     let result = match cmd {
         "login" => commands::login(flags.get("token"), flags.get("base")),
         "phone" => commands::phone(positional.first(), &flags),
+        "mfa" => commands::mfa(positional.first(), &flags),
         "logout" => commands::logout(),
         "whoami" => commands::whoami(),
         "settings" => commands::settings(),
@@ -140,4 +143,5 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 

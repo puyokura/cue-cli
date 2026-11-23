@@ -30,39 +30,44 @@ cue region                    # 公開 RPC（認証不要）
 cue rpc user.v1.UserPublicService/GetExchangeInfo
 cue raw user.v1.UserPublicService/CheckRegion   # proto コーデック
 cue watch --seconds 10        # Socket.IO を開いてフレームを観測
-cue login --token <token>     # サービスが発行した Bearer トークン（Web 経由は非対応）
+
+cue phone start --number +8190...   # SMS コード送信（verificationId を返す）
+cue phone verify --id <v> --code <c>  # コードでログインしトークンを保存
+cue phone password --number +8190...  # パスワードでログイン（stdin から読む）
+
 cue whoami
 cue sessions --limit 20
 cue send <session_id> --text "やあ"   # join_session + user_message を送出
+cue mfa status                # 2FA の有効状態
+cue mfa totp-start            # 認証アプリ登録の開始（otpauthUri を返す）
+cue mfa totp-finish --flow <id> --code <6桁>
+cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在判定
 ```
 
 `--base` もしくは `CUE_BASE_URL`、`CUE_WS_URL` で接続先を差し替えられる。
 
 ## 認証について（実測）
 
-現時点で通るのは **ブラウザでの Google 同意 → セッショントークン** の経路のみ。
-CLI からログインを完結させる経路は、Turnstile とサーバ固定 redirect_uri のため存在しない。
-詳細と切り分けの全記録は `docs/auth-status.md`。
+ネイティブ経路（アプリ本体と同じ）のみ。ブラウザを介したログインは使わない。
 
-- 電話＋SMS: `403 / code 400232 "Phone authentication is not available for this account"`。
-  電話番号の国・`X-Forwarded-For`・client-type/product ヘッダ・UA・Origin・Bearer 有無を
-  変えても不変。サーバ側のアカウント状態で決まっている。
-- メール＋パスワード: `Need CAPTCHA code!`（Cloudflare Turnstile）。
-- メール新規登録: 検証コードが必要で、コード送信 RPC は公開されていない。
-- Google ID トークン: `GoogleGSIAuth` は aud 検証まで到達する（実トークン必須）。
-- `Oauth2Authorize` は 200 で同意 URL を返す。`redirect_uri` はサーバ固定で、
-  任意の URL は `invalid auth redirect url` で拒否。
+- 電話 + SMS / 電話 + パスワードは **通る**。ただし `x-product-name: manus-agents` が必須で、
+  これが無いと `403 / 400232` で Manus 系の面に落ちる（CLI は常に送る）。
+- 2FA は TOTP とパスキーの両方が存在する（`user.v1.UserAuthService` 配下、要認証）。
+- メールは Cloudflare Turnstile 必須。Google は実 id_token / access_token 必須。
+- 実 SMS でのログイン完走は未実施（電話番号とコードが要る）。
+
+詳細と切り分けの全記録は `docs/auth-status.md`、RPC の実測仕様は `docs/protocol.md`。
 
 ## 検証
 
 ```
-python tests/run_smoke.py            # 25/25 PASS
-cargo test --manifest-path crates/cue-cli/Cargo.toml   # 9/9 PASS
+python tests/run_smoke.py                               # 40/40 PASS
+cargo test --manifest-path crates/cue-cli/Cargo.toml    # 12/12 PASS
 ```
 
 実バイナリを別プロセスで起動し、公開 RPC の応答、proto コーデック、
-Socket.IO の 101 ハンドシェイクと名前空間拒否、不正トークンが永続化されないこと、
-未認証時の終了コードを実測で確認する。
+Socket.IO の 101 ハンドシェイクと名前空間拒否、電話ゲートが開いていること、
+ルート存在判定、不正トークンが永続化されないこと、未認証時の終了コードを実測で確認する。
 
 ## ライセンス
 

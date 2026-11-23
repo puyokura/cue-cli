@@ -161,6 +161,18 @@ def main():
     except (json.JSONDecodeError, KeyError):
         check("discover output is JSON with probes", False, out[:200])
 
+    # 14. mfa help is token-free; the rest of mfa requires a token
+    rc, out, err = run(["mfa", "help"], env_extra=env)
+    check("mfa help exits 0 without a token", rc == 0, err)
+    subs = ["status", "totp-start", "totp-finish", "enable", "disable", "codes",
+            "login-methods", "passkeys"]
+    missing = [s for s in subs if f"cue mfa {s}" not in out]
+    check("mfa help lists every subcommand", not missing, f"missing={missing}")
+
+    rc, out, err = run(["mfa", "status"], env_extra=env)
+    check("mfa status without token fails", rc != 0, out)
+    check("mfa status explains the missing token", "no token" in err, err)
+
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
     print(f"\n{passed}/{total} checks passed")

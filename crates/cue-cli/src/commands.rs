@@ -422,3 +422,107 @@ pub fn discover(service: Option<&String>, methods: &[String]) -> Result<String, 
     }
     Ok(pretty(&json!({ "service": service, "probes": rows })))
 }
+
+/// `cue mfa <status|totp-start|totp-finish|enable|disable|codes>`
+///
+/// Every call needs a session token. The TOTP enrollment sequence is the one
+/// the web client uses: start -> authenticator app shows a 6-digit code ->
+/// finish -> enable (which returns recovery codes).
+pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+    let sub = sub.map(String::as_str).unwrap_or("help");
+
+    // Help must work before any token exists.
+    if sub == "help" {
+        return Ok(json!({
+            "usage": [
+                "cue mfa status",
+                "cue mfa totp-start",
+                "cue mfa totp-finish --flow <flowId> --code <6-digit>",
+                "cue mfa enable | cue mfa disable",
+                "cue mfa codes",
+                "cue mfa login-methods",
+                "cue mfa passkeys",
+            ],
+        })
+        .to_string());
+    }
+
+    let token = authed()?;
+    let origin = base();
+
+    match sub {
+        "status" => {
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/GetMfaStatus",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "totp-start" => {
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/StartTotpEnrollment",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "totp-finish" => {
+            let flow = flags
+                .get("flow")
+                .ok_or("mfa totp-finish requires --flow <flowId>")?;
+            let code = flags
+                .get("code")
+                .ok_or("mfa totp-finish requires --code <6-digit code>")?;
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/FinishTotpEnrollment",
+                Some(&token),
+                &json!({ "flow_id": flow, "code": code }),
+            )?;
+            Ok(pretty(&value))
+        }
+        "enable" | "disable" => {
+            let enabled = sub == "enable";
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/SetLoginMfa",
+                Some(&token),
+                &json!({ "enabled": enabled }),
+            )?;
+            Ok(pretty(&value))
+        }
+        "codes" => {
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/RegenerateRecoveryCodes",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "login-methods" => {
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/ListLoginMethods",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+        "passkeys" => {
+            let value = client::call_json(
+                &origin,
+                "/user.v1.UserAuthService/ListPasskeys",
+                Some(&token),
+                &json!({}),
+            )?;
+            Ok(pretty(&value))
+        }
+
+        other => Err(format!("unknown mfa subcommand: {other}")),
+    }
+}
+
