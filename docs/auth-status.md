@@ -259,3 +259,24 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 
 プレビューと公開は別物である。プレビューが 200 でも、デプロイ前の公開ドメインは 404 を返す。
 
+
+## 誤操作の記録: cloud PC の誤作成（2026-11-23）
+
+契約調査のつもりで `cloud_pc.v1.CloudPCService/Create` に全必須フィールドを埋めて送ったところ、
+**実際に 2 台作成された**。`Create` は検証を通った時点で作成する。フィールド不足を探る目的で
+叩いてはいけない API だった。
+
+| pcId | status | createdAt |
+|---|---|---|
+| `aipsxsxsukepo5k68obu1dkzj` | `PC_STATUS_WAIT_PAYMENT` | 2026-11-23T09:03:15Z |
+| `a7nlpzsdopj3oid08o51iuqv2` | `PC_STATUS_WAIT_PAYMENT` | 2026-11-23T09:03:16Z |
+
+- どちらも支払い待ちで、`totalCredits` は 1300 のまま変化なし（課金は発生していない）
+- `GetBalanceInfo` は両方 500 を返す（未払いのため計算できないと推測。断定はしない）
+- 削除経路は `Delete` / `DeleteCloudPC` / `Cancel` / `CancelCreate` のいずれも 404。CLI からは消せない
+- `Get` の応答に `sshPassword` があることを発見し、マスク対象に追加した
+
+### 教訓
+
+`Create` / `Deploy` / `Register` のような動詞の API は、必須フィールドを探る目的でも
+**検証を通れば副作用が起きる**。契約調査は、値を入れずに 400 を読む段階で止める。

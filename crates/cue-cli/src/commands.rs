@@ -764,16 +764,33 @@ fn describe(value: &Value) -> Value {
 /// the raw object would put a live credential into scrollback and logs, so the
 /// values are replaced with their existence and byte length.
 pub fn redact(value: &Value) -> Value {
+    // Exact names seen in real responses. `sshPassword` was missed by the original
+    // list, so a suffix rule below covers the family instead of one spelling.
     const SECRET_KEYS: &[&str] = &[
         "token", "session_id", "sessionid", "access_token", "accesstoken",
         "refresh_token", "refreshtoken", "secret", "password", "recovery_codes",
         "recoverycodes", "credential_json", "credentialjson", "private_key",
+        "ssh_password", "sshpassword", "otpauth_uri", "otpauthuri",
+        "verification_code", "verificationcode",
     ];
+
+    // A key whose name ends with one of these carries a credential in this API even
+    // when the exact spelling is new to us. Masking is one-way, so a false positive
+    // only hides a value that was not secret.
+    fn is_secret_key(key: &str) -> bool {
+        let lower = key.to_ascii_lowercase();
+        if SECRET_KEYS.contains(&lower.as_str()) {
+            return true;
+        }
+        ["password", "passwd", "token", "secret", "privatekey", "private_key"]
+            .iter()
+            .any(|suffix| lower.ends_with(suffix))
+    }
     match value {
         Value::Object(map) => {
             let mut out = serde_json::Map::with_capacity(map.len());
             for (k, v) in map {
-                if SECRET_KEYS.contains(&k.to_ascii_lowercase().as_str()) {
+                if is_secret_key(k) {
                     let len = match v {
                         Value::String(s) => s.len(),
                         _ => 0,
@@ -942,4 +959,33 @@ pub fn webdev_detail(project: Option<&String>) -> Result<String, String> {
         &json!({ "projectId": project }),
     )?;
     Ok(pretty(&redact(&value)))
+}
+
+
+#[cfg(test)]
+mod redaction_suffix_tests {
+    use super::redact;
+    use serde_json::json;
+
+    #[test]
+    fn ssh_password_is_masked() {
+        // Measured: Get on a cloud PC returns `sshPassword`.
+        let v = json!({ "pcId": "x", "sshPassword": "test-value-not-a-real-credential" });
+        let r = redact(&v);
+        assert_eq!(r["pcId"], "x");
+        assert_eq!(r["sshPassword"]["redacted"], true);
+    }
+
+    #[test]
+    fn credential_shaped_suffixes_are_masked() {
+        let v = json!({
+            "newPassword": "a", "rootPassword": "b", "apiToken": "c",
+            "clientSecret": "d", "xPrivateKey": "e", "note": "keep"
+        });
+        let r = redact(&v);
+        for key in ["newPassword", "rootPassword", "apiToken", "clientSecret", "xPrivateKey"] {
+            assert_eq!(r[key]["redacted"], true, "{key} should be masked");
+        }
+        assert_eq!(r["note"], "keep");
+    }
 }
