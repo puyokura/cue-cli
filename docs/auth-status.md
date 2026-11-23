@@ -130,3 +130,27 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 前者はリカバリコードを再発行した（新しい値は取得できず、必要なら Web 設定画面から再発行）。
 後者は flow を開始しただけで、`ListPasskeys` が空のため登録は完了していない。
 以後、状態を変える RPC は実行前に確認を取る。
+
+## 追加で実測した面（2026-11-23）
+
+| 面 | RPC | 実測 |
+|---|---|---|
+| エージェントメール | `TelecomService/ListAgentEmails` | 200。3 件（`<prefix>@`, `<name>@`, `<prefix>-<id>@` `bot.cue.im`） |
+| メール名前空間 | `TelecomService/GetAgentEmailNamespace` | 200。`baseDomain: bot.cue.im` |
+| クラウドPC リージョン | `CloudPCService/ListAvailableRegions` | 200。5 件（us-east1, us-west1, asia-southeast1 ほか） |
+| webdev | `WebDevService/ListWebDevProjects` | 200（`{}`・プロジェクト0件） |
+| プロジェクト | `ProjectService/ListProjects` | 200（`{}`・0件） |
+| スキル | `SkillService/ListSkills` | 公式 `skill-creator`（未追加） |
+| コネクタ | `ConnectorsService/ListConnectors` | 20 件（Shopify, Outlook Calendar, GitHub, Meta Ads Manager ほか） |
+
+## 沙箱（sandbox）の実測
+
+- セッションの `defaultSandbox.status` は `STATUS_RUNNING`（`GetSession`）
+- 最新の `sandboxUpdate` イベントに `sandboxId: <sandbox id>`、
+  `vncUrl: wss://5901-…sg3.manus.computer/vnc`、`webRTCUrl: https://8333-…/?embed=1` が入る
+- `GET /api/chat/getSandboxStatus` は **403 Permission denied 10002**（`AgentServerError`）。
+  `sessionId` と `sandboxUrl` の両方を実値にしても同じ。`getSessionV2` は同じトークンで 200 なので、
+  このエンドポイントは別の認可（サンドボックス側の権限）を要求している
+- サンドボックスホスト自体は到達する（`iyw…` は 400、`8333-iyw…` は 502。ただし上記の理由で未操作）
+
+沙箱の起動・操縦（`startSandbox` / VNC 接続）は状態変更を伴うため未実行。本人確認待ち。

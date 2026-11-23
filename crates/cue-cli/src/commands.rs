@@ -655,6 +655,11 @@ pub fn coverage() -> Result<String, String> {
         ("cloud pcs", "/cloud_pc.v1.CloudPCService/List", json!({"limit":20})),
         ("phone numbers", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
         ("remote control", "/device_authorization.v1.DeviceAuthorizationService/ListRemoteControlGrants", json!({})),
+        ("agent emails", "/telecom.v1.TelecomService/ListAgentEmails", json!({})),
+        ("email namespace", "/telecom.v1.TelecomService/GetAgentEmailNamespace", json!({})),
+        ("cloud pc regions", "/cloud_pc.v1.CloudPCService/ListAvailableRegions", json!({})),
+        ("webdev projects", "/webdev.v1.WebDevService/ListWebDevProjects", json!({"limit":10})),
+        ("projects", "/session.v1.ProjectService/ListProjects", json!({"limit":10})),
     ];
 
     let mut rows = Vec::new();
@@ -697,3 +702,4 @@ fn describe(value: &Value) -> Value {
         other => json!(other.to_string()),
     }
 }
+
