@@ -45,7 +45,8 @@ cue phone password --number +8190...  # パスワードでログイン（stdin �
 
 cue whoami
 cue sessions --limit 20
-cue send <session_id> --text "やあ"   # join_session + user_message を送出
+cue new --text "やあ"         # 新規セッション（ID はクライアントが生成）
+cue send <session_id> --text "やあ"   # 既存セッションに join_session + user_message
 cue mfa status                # 2FA の有効状態
 cue mfa totp-start            # 認証アプリ登録の開始（otpauthUri を返す）
 cue mfa totp-finish --flow <id> --code <6桁>
@@ -129,6 +130,7 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
 
 
 

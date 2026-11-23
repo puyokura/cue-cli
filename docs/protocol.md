@@ -338,3 +338,26 @@ MFA はログイン応答のエラーコードとして現れる設計と読め�
 `session.v1.SessionService/ListSessions` は新規アカウントで `{}` を返す。
 実際の一覧は `session.v1.SessionService/SearchAgentSessions {query, limit}` にあり、
 `sessions[].uid` が 22 文字のセッション ID。
+
+## 12. セッション ID はクライアントが生成する
+
+実測: サーバはセッション ID を発行しない。Web クライアントも発行しない。
+**クライアントが 22 文字の base62 ID をローカル生成し、まだ存在しないセッションに対して
+`user_message` を送る。サーバは初回利用時にそれを永続化する。**
+
+- `0000000000000000000000`（22 個のゼロ）を使うと `agent_error code=5001 "Failed to create session"`。
+  ゼロは「未作成」を表す sentinel であって、サーバに発行を頼む値ではない
+- 自前で生成した 22 文字（例: `G8hjFxaiWYg5zqUonrl9JB`）を送ると、その ID でセッションが作られ、
+  `GetSession` と `getSessionV2` の両方で 200 が返る。タイトルは最初のプロンプトから自動で付く
+- `crates/cue-cli/src/chat.rs` の `message_id()` と同じ形式（`^[A-Za-z0-9]{22}$`）で足りる
+
+### 一覧の 2 経路
+
+| RPC | 返すもの |
+|---|---|
+| `session.v1.SessionService/ListSessions {limit}` | 対話で作ったセッション（新しい順、`sessions[]`） |
+| `session.v1.SessionService/SearchAgentSessions {query, limit}` | Cue エージェント由来のセッション（`total` 付き） |
+
+`ListSessions` は当初 `{}` を返したが、それは対話セッションが 0 件だったため。
+新規セッションを作ると `sessions[]` に載る。両者は別の集合を返すので、
+「一覧が空＝アカウントに何も無い」ではない。

@@ -224,6 +224,11 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 15f. `new` validates its arguments before touching the network
+    rc, out, err = run(["new"], env_extra=env)
+    check("new without --text fails", rc != 0, out)
+    check("new names the missing prompt", "--text" in err, err[:120])
+
     # 16. a stored token must never appear in any command output.
     #     Write a dummy token, then exercise a command's error path and inspect output.
     state = tempfile.mkdtemp(prefix="cue-leak-")
@@ -270,6 +275,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

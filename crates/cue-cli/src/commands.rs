@@ -826,3 +826,21 @@ mod redaction_tests {
 }
 
 
+
+/// `cue new --text <prompt>` — start a brand-new session.
+///
+/// Measured: the service does not mint a session id for a client. The web client
+/// generates a 22-character base62 id locally and sends it in `user_message`
+/// against a session that does not exist yet; the server persists it on first use.
+pub fn new_session(text: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+    let text = text.ok_or("new requires --text <prompt>")?;
+    if text.trim().is_empty() {
+        return Err("--text is empty".into());
+    }
+    let id = crate::chat::message_id();
+    let mut forwarded = flags.clone();
+    forwarded.remove("text");
+    // The id is generated here, so `send` must be told about it.
+    let out = send(Some(&id), Some(text), &forwarded)?;
+    Ok(format!("sessionId={id}\n{out}"))
+}

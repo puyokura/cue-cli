@@ -117,12 +117,21 @@ def main():
     else:
         check("session detail", "SKIP", "no session to read")
 
-    # 7. optional: create a session and post one prompt (mutates the account)
+    # 7. optional: create a session and post one prompt (mutates the account).
+    #    The id is generated locally; the server persists it on first use.
     if CREATE_SESSION:
-        rc, out, err = run(["rpc", "session.v1.SessionService/CreateSession"], )
-        check("create session", "PASS" if rc == 0 else "SKIP", err[:160])
+        rc, out, err = run(["new", "--text", "reply with the single word: ok",
+                            "--seconds", "45", "--frames", "160"])
+        new_id = ""
+        for line in out.splitlines():
+            if line.startswith("sessionId="):
+                new_id = line.split("=", 1)[1].strip()
+        check("new session is created", "PASS" if rc == 0 and len(new_id) == 22 else "FAIL",
+              (err or out)[:160])
+        check("new session gets an answer", "PASS" if "chat[assistant]" in out else "FAIL",
+              out[-160:])
     else:
-        check("create session", "SKIP", "not requested (--create-session)")
+        check("new session is created", "SKIP", "not requested (--create-session)")
 
     # 8. passive socket handshake with the stored token
     rc, out, err = run(["watch", "--seconds", "8", "--frames", "8"])
@@ -172,6 +181,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

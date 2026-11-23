@@ -10,7 +10,7 @@
 - 対話ログイン `cue login`（電話番号 + SMS コード）を追加。
 - `cue phone start|verify|password|reset`、`cue mfa ...`、`cue join`、`cue send`、
   `cue watch`、`cue coverage`、`cue discover` を追加。
-- `cue mcp`: stdio の MCP サーバー。`initialize` / `tools/list` / `tools/call` を実装し、11 ツールを公開する。遅いツールが読み取りループを塞がない。- Socket.IO（Engine.IO v4）クライアントを実装。`join_session` と `user_message` を送出し、
+- `cue new --text`: セッション ID をローカル生成して新規セッションを開始する（サーバは ID を発行しない）。- `cue mcp`: stdio の MCP サーバー。`initialize` / `tools/list` / `tools/call` を実装し、11 ツールを公開する。遅いツールが読み取りループを塞がない。- Socket.IO（Engine.IO v4）クライアントを実装。`join_session` と `user_message` を送出し、
   `chat` / `chatDelta` / `statusUpdate` / `liveStatus` を受信する。
 
 ### 新機能
@@ -27,6 +27,7 @@
   cloud_pc の生成、2FA の TOTP 登録（サーバが 400279 で拒否）、パスキー登録の完了（端末の認証器が要る）。
 - 認証は電話 + SMS のみ実測済み。メールは Turnstile、Google は実トークンが前提で未検証。
 - 本リポジトリは非公式の独立実装。サービスの規約は利用者自身の責任で確認すること。
+
 
 
 
