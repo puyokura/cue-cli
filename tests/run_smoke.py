@@ -195,6 +195,35 @@ def main():
           err[:160])
     check("server error keeps the service code", "400228" in err, err[:160])
 
+    # 15e. MCP over stdio: initialize, tools/list, tools/call, unknown tool
+    mcp_input = "\n".join([
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}',
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}',
+        '{"jsonrpc":"2.0","id":3,"method":"tools/call",'
+        '"params":{"name":"cue_nope","arguments":{}}}',
+    ]) + "\n"
+    rc, out, err = run(["mcp"], env_extra=env, stdin_data=mcp_input)
+    replies = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        replies[msg.get("id")] = msg
+    check("mcp answers initialize", 1 in replies and
+          replies[1].get("result", {}).get("serverInfo", {}).get("name") == "cue",
+          str(replies.get(1))[:160])
+    check("mcp declares a protocol version", 1 in replies and
+          "protocolVersion" in replies[1].get("result", {}), "")
+    tool_list = replies.get(2, {}).get("result", {}).get("tools", [])
+    check("mcp tools/list returns tools", len(tool_list) >= 10, f"count={len(tool_list)}")
+    check("mcp tools/call rejects an unknown tool",
+          3 in replies and replies[3].get("result", {}).get("isError") is True,
+          str(replies.get(3))[:160])
+
     # 15c. unknown flags must be rejected, and version must work
     rc, out, err = run(["whoami", "--bogus"], env_extra=env)
     check("unknown flag is rejected", rc == 2, f"rc={rc}")
@@ -229,6 +258,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

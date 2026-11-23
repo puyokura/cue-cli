@@ -54,6 +54,24 @@ cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在
 
 接続先は `--base`、`CUE_BASE_URL`、`CUE_WS_URL` で差し替えられる。
 
+### MCP サーバー
+
+`cue mcp` は stdio で動く MCP サーバーになる。`initialize` / `tools/list` / `tools/call` を実装し、
+ツールは CLI の非対話コマンドをそのまま公開する（`cue_region`、`cue_whoami`、`cue_sessions`、
+`cue_session`、`cue_agents`、`cue_rpc`、`cue_send`、`cue_join`、`cue_coverage`、`cue_mfa_status`、
+`cue_discover`）。
+
+```
+{
+  "mcpServers": {
+    "cue": { "command": "<repo>/target/release/cue", "args": ["mcp"] }
+  }
+}
+```
+
+各 `tools/call` は別スレッドで走る。遅いツール（`cue_join` など）の実行中でも、
+後続の軽いツールは待たされずに応答する（`tests/mcp_probe.py` で実測）。
+
 ### 状態ファイル
 
 トークンは OS 標準の設定ディレクトリに置く。
@@ -102,6 +120,7 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
 
 
 

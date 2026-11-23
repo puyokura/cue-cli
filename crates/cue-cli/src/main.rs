@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 mod chat;
+mod mcp;
 mod client;
 mod commands;
 mod phone;
@@ -67,6 +68,8 @@ Commands:
   methods                             print the static RPC inventory path
   discover <service> <method>...      probe whether Connect routes exist (404/401 oracle)
   coverage                            read-only survey of the authenticated surface
+  version                              print the version
+  mcp                                  serve MCP over stdio (initialize/tools/list/tools/call)
 ",
         version = env!("CARGO_PKG_VERSION")
     );
@@ -175,6 +178,7 @@ fn main() {
         "coverage" => commands::coverage(),
         "methods" => commands::methods(),
         "version" | "--version" | "-V" => Ok(format!("cue {}", env!("CARGO_PKG_VERSION"))),
+        "mcp" => mcp::serve(),
         "--help" | "-h" | "help" => {
             usage_ok();
         }
@@ -250,6 +254,9 @@ pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String>
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
+
+
 
 
 
