@@ -44,9 +44,17 @@ x-product-name: <product>
 トークンは Web 版では `localStorage["sessionId"]` に保存され、`Bearer` で送られる。
 本 CLI は同じ値を受け取り、`authorization: Bearer` で送る（`cue login --token`）。
 
-## 3. RPC 面（252 本）
+## 3. RPC 面
 
-全数は `docs/rpc-inventory.txt`。サービス単位の内訳（実測で到達性を確認したものは「動作」列）:
+全数は 2 ファイルに分かれている。出所が違うので混ぜない。
+
+- `docs/rpc-inventory.txt` — APK の文字列から静的に抽出した **252 本**
+- `docs/rpc-discovered.txt` — 実行時の存在判定で静的全数の外側に足した **149 本**
+
+合計 401 本が名前として確定している。ただしこれは「名前が分かっている数」であって
+「サーバに実在する全ルート数」ではない（10 節参照）。
+
+静的分の内訳（実測で到達性を確認したものは「未認証での挙動」列）:
 
 | サービス | 本数 | 未認証での挙動 |
 |---|---|---|
@@ -62,6 +70,22 @@ x-product-name: <product>
 | `connectors.v1.*` | 5 | 401 |
 | `notifier.v1.*` | 3 | 400/200 |
 | その他（space/team/webdev/device_authorization ほか） | 109 | 401 |
+
+実行時発見分の内訳:
+
+| サービス | 本数 |
+|---|---|
+| `webdev.v1.WebDevService` | 34 |
+| `user.v1.UserService` | 32 |
+| `user.v1.UserAuthService` | 19 |
+| `session.v1.SessionService` | 19 |
+| `session.v1.ProjectService` | 12 |
+| `connectors.v1.ConnectorsService` | 9 |
+| `session.v1.SessionCollaborateService` | 7 |
+| `cloud_pc.v1.CloudPCService` | 6 |
+| `device_authorization.v1.DeviceAuthorizationService` | 4 |
+| `user.v1.UserAuthPublicService` | 4 |
+| その他（space/team/telecom/file/skill ほか） | 9 |
 
 ## 4. 認証経路の実測結果
 
@@ -254,3 +278,23 @@ Socket.IO ハンドシェイク・`join_session` / `user_message` の送出ま�
 MFA 要求かどうかは未認証では区別できなかった。
 `loginMfaRequired` に対応する公開 RPC（`VerifyLoginMfa` 等）は 404 で存在しない。
 MFA はログイン応答のエラーコードとして現れる設計と読めるが、**実アカウントでの確認は未実施**。
+
+## 10. RPC 全数の数え方（重要な但し書き）
+
+`docs/rpc-inventory.txt` の 252 本は **APK の libapp.so から抽出した文字列** が上限で、
+サーバに実在する全ルートではない。この差は実測で確認した。
+
+- APK 文字列に無いメソッドでも、Web バンドルが `getApi(<Service>).<camelCase>` で
+  呼んでいるものは実在する。例: `user.v1.UserService/GetBackupSuggestion` は
+  認証不要で 200 を返す。
+- 404/401 オラクル（存在すれば 401/400/200、存在しなければ Connect 本文なしの 404）で
+  名前を当てれば、認証前に存在を確定できる。
+
+`docs/rpc-discovered.txt` はその方法で静的全数の外側に足したもの。
+出所が違う（静的抽出 vs 実行時発見）ので物理的に分けてある。
+
+### 10.1 誤検出の扱い
+
+`404` でも Connect 本文（`{"code":"not_found",...}`）が返る場合は「ルートは存在し、
+対象レコードが無い」を意味する。オラクルは本文の有無で判定するので、
+`CheckInvitationCodeRemains` のような業務 404 を誤って「存在しない」と判定しない。

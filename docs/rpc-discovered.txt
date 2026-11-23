@@ -1,21 +1,92 @@
 # 実行時発見の RPC（静的全数には載っていない）
 #
 # 発見方法: 既知サービス配下の候補名を POST し、
-#   401 (Connect unauthenticated) または 400 (buf.validate) -> ルートが存在する
-#   404 + Connect 本文なし                                  -> ルートが存在しない
+#   401 (Connect unauthenticated) / 400 (buf.validate) / 200 -> ルートが存在する
+#   404 で Connect 本文なし                                     -> ルートが存在しない
+#   404 でも Connect 本文あり ({"code":"not_found"})           -> ルートは存在（業務上の not found）
+#
+# 候補の出所は 3 系統:
+#   (a) APK 文字列に無い名前を機械的に列挙して当てる
+#   (b) Web バンドルの getApi(<Service>).<camelCase> 呼び出しを PascalCase にして当てる
+#   (c) 候補名を複数パッケージに順に当てて、どのパッケージが所有するかまで確定する
+#
 # 静的全数 docs/rpc-inventory.txt は APK の文字列から抽出した 252 本。
 # 本ファイルはその外側を実行時に足したもの（出所が違うので分けて置く）。
-
-user.v1.UserAuthService/BindCuePhone	400
+cloud_pc.v1.CloudPCService/CheckCloudPCDomainAvailable	400
+cloud_pc.v1.CloudPCService/Create	400
+cloud_pc.v1.CloudPCService/GetTeamBalanceInfo	401
+cloud_pc.v1.CloudPCService/GetTeamCloudComputerConfig	401
+cloud_pc.v1.CloudPCService/GetTeamUsageDetail	401
+cloud_pc.v1.CloudPCService/GetUsageDetail	401
+connectors.v1.ConnectorsService/CreateConnector	401
+connectors.v1.ConnectorsService/CreateRemoteMCPConnector	401
+connectors.v1.ConnectorsService/DeleteConnector	401
+connectors.v1.ConnectorsService/EnableConnector	401
+connectors.v1.ConnectorsService/GetGithubRepoList	401
+connectors.v1.ConnectorsService/GoogleAddMeetToEvent	401
+connectors.v1.ConnectorsService/GoogleCreateMeet	401
+connectors.v1.ConnectorsService/InspectRemoteMCPServer	401
+connectors.v1.ConnectorsService/ListConnectorTunnelAvailability	401
+connectors.v1.ConnectorTeamPolicyService/BatchUpdateTeamConnectorPolicies	401
+device_authorization.v1.DeviceAuthorizationService/BatchRevokeRemoteControlGrants	400
+device_authorization.v1.DeviceAuthorizationService/GetDeviceWallpapers	400
+device_authorization.v1.DeviceAuthorizationService/GrantRemoteControlAccessFromCurrentDevice	401
+device_authorization.v1.DeviceAuthorizationService/ListLoginInstances	401
+file.v1.FileService/BatchSignUrl	200
+session.v1.ProjectService/AddProjectFile	401
+session.v1.ProjectService/BatchAddProjectFiles	401
+session.v1.ProjectService/BatchInviteMember	401
+session.v1.ProjectService/CreateProject	401
+session.v1.ProjectService/CreateSidebarSection	401
+session.v1.ProjectService/DeleteProject	401
+session.v1.ProjectService/DeleteProjectFile	401
+session.v1.ProjectService/DeleteSidebarSection	401
+session.v1.ProjectService/DuplicateProject	400
+session.v1.ProjectService/ExitProject	401
+session.v1.ProjectService/ListProjectFiles	401
+session.v1.ProjectService/ListProjectInstructionVersions	401
+session.v1.SessionCollaborateService/AcceptInvite	400
+session.v1.SessionCollaborateService/BatchInviteCollaborators	400
+session.v1.SessionCollaborateService/CheckSessionInvite	400
+session.v1.SessionCollaborateService/ExitCollaboration	400
+session.v1.SessionCollaborateService/GetMemberRequestStatus	400
+session.v1.SessionCollaborateService/InviteCollaborator	400
+session.v1.SessionCollaborateService/JoinSessionCollaborationForTeam	400
+session.v1.SessionService/ArchiveSession	401
+session.v1.SessionService/BatchUpdateSharedSessionPermission	400
+session.v1.SessionService/CheckHaveNoneReadEmail	401
+session.v1.SessionService/CreateFigmaParseTask	400
+session.v1.SessionService/CreateScheduledTask	401
+session.v1.SessionService/DeleteSlideTemplate	400
+session.v1.SessionService/FavoriteSession	401
+session.v1.SessionService/ForkSession	400
+session.v1.SessionService/GenerateDocumentSuggestion	400
+session.v1.SessionService/GetReceivedEmailDetail	400
+session.v1.SessionService/GetSessionDiagnosis	400
+session.v1.SessionService/GetSessionFileCleanDownloadUrl	400
+session.v1.SessionService/GetSessionFileResourceMapping	400
+session.v1.SessionService/GetSessionFileShareState	401
+session.v1.SessionService/GetSessionFileUploadUrl	401
+session.v1.SessionService/ListArtifactTasks	400
+session.v1.SessionService/ListAutomations	401
+session.v1.SessionService/ListAutomationTimeAxis	401
+session.v1.SessionService/ListPublicShareRequests	400
+skill.v1.SkillService/ImportSkill	401
+space.v1.SpaceService/EditSpaceSubDomain	401
+space.v1.SpaceService/GetEditSpaceSiteCode	401
+team.v1.TeamService/ExportTeamUsage	401
+team.v1.TeamService/JoinTeam	401
+telecom.v1.TelecomService/GetTeamPhoneNumberBalanceInfo	401
+telecom.v1.TelecomService/GetTeamPhoneNumberConfig	401
+user.v1.UserAuthPublicService/ExchangeTokenByCode	400
+user.v1.UserAuthPublicService/FinishPasskeyLogin	400
+user.v1.UserAuthPublicService/GetUserPlatforms	400
+user.v1.UserAuthPublicService/GoogleGSIAuth	400
 user.v1.UserAuthService/DeletePasskey	400
 user.v1.UserAuthService/DeleteTotp	401
-user.v1.UserAuthService/DeleteUser	401
 user.v1.UserAuthService/FinishPasskeyRegistration	400
 user.v1.UserAuthService/FinishTotpEnrollment	400
-user.v1.UserAuthService/GenerateTempAuthCode	401
-user.v1.UserAuthService/GetCuePhoneAuthInfo	401
 user.v1.UserAuthService/GetMfaStatus	401
-user.v1.UserAuthService/ListLoginMethods	401
 user.v1.UserAuthService/ListPasskeys	401
 user.v1.UserAuthService/RegenerateRecoveryCodes	401
 user.v1.UserAuthService/RenamePasskey	400
@@ -23,5 +94,71 @@ user.v1.UserAuthService/SetLoginMfa	401
 user.v1.UserAuthService/StartPasskeyRegistration	401
 user.v1.UserAuthService/StartTotpEnrollment	401
 user.v1.UserAuthService/UnbindLoginMethod	401
-user.v1.UserAuthService/UpdateEmail	400
-user.v1.UserAuthService/VerifyEmail	400
+user.v1.UserPublicService/GetAppealStatus	401
+user.v1.UserService/AckCompensationClaimedNotice	401
+user.v1.UserService/ClaimVideoCampaignCoupon	401
+user.v1.UserService/ClearUserSubscriptionStatus	401
+user.v1.UserService/CreateAgentEmailWhiteList	400
+user.v1.UserService/CreateTriggerAgentEmail	401
+user.v1.UserService/CreateWorkflowAgentEmail	401
+user.v1.UserService/DeleteAgentEmailWhiteList	400
+user.v1.UserService/DeleteWorkflowAgentEmail	400
+user.v1.UserService/DisconnectAPP	401
+user.v1.UserService/GetAgentEmail	401
+user.v1.UserService/GetBackupSuggestion	200
+user.v1.UserService/GetConnectAPP	401
+user.v1.UserService/GetGoogleDriveAuthUrl	401
+user.v1.UserService/GetHelpCenterToken	401
+user.v1.UserService/GetVideoCampaignStatus	401
+user.v1.UserService/ImportUserPersonalization	400
+user.v1.UserService/ListAddonCreditLots	401
+user.v1.UserService/ListRegionCode	401
+user.v1.UserService/ListUserCreditsDailyLog	401
+user.v1.UserService/LoopClearUserSubscriptionStatus	401
+user.v1.UserService/LoopTopupStatus	401
+user.v1.UserService/SaveOnboardingPreference	400
+user.v1.UserService/SendInvitationEmail	400
+user.v1.UserService/UpdateAgentEmail	401
+user.v1.UserService/UpdateAgentEmailWhiteList	400
+user.v1.UserService/UpdateUsageTopupConfig	401
+user.v1.UserService/UpdateUserCountry	401
+user.v1.UserService/UpdateUserPersonalization	401
+user.v1.UserService/UpdateWorkflowAgentEmail	400
+user.v1.UserService/WebdevUsageDetail	401
+user.v1.UserService/WebdevUsageInfo	401
+user.v1.UserService/WebdevUsagePreview	401
+webdev.v1.WebDevService/AddDatabaseRecord	401
+webdev.v1.WebDevService/CheckDomainAvailable	401
+webdev.v1.WebDevService/ConnectCustomDomain	401
+webdev.v1.WebDevService/ConnectPurchasedSubdomain	401
+webdev.v1.WebDevService/CreateCoupon	401
+webdev.v1.WebDevService/CreateDomainRecord	401
+webdev.v1.WebDevService/CreateStorageDirectory	401
+webdev.v1.WebDevService/DeleteCoupon	401
+webdev.v1.WebDevService/DeleteCustomDomain	401
+webdev.v1.WebDevService/DeleteDatabaseRecord	401
+webdev.v1.WebDevService/DeleteDomainRecord	401
+webdev.v1.WebDevService/DeletePurchasedSubdomain	401
+webdev.v1.WebDevService/DeleteStorageFiles	401
+webdev.v1.WebDevService/DeleteWebDevSchedule	401
+webdev.v1.WebDevService/DisconnectPurchasedDomain	400
+webdev.v1.WebDevService/DomainCheckout	401
+webdev.v1.WebDevService/EnableWebDevSchedule	401
+webdev.v1.WebDevService/ExportDatabase	401
+webdev.v1.WebDevService/GetCustomDomainStatus	401
+webdev.v1.WebDevService/GetDatabaseSchema	401
+webdev.v1.WebDevService/GetDomainCheckoutStatus	401
+webdev.v1.WebDevService/GetDomainContact	401
+webdev.v1.WebDevService/GetGithubAppInstallations	401
+webdev.v1.WebDevService/GetProjectDirectory	401
+webdev.v1.WebDevService/GetProjectFile	401
+webdev.v1.WebDevService/GetPurchasedDomain	401
+webdev.v1.WebDevService/GetSavedDomainContact	401
+webdev.v1.WebDevService/GetStorageFile	401
+webdev.v1.WebDevService/GetStoragePage	401
+webdev.v1.WebDevService/GetSubDomain	401
+webdev.v1.WebDevService/GetWebDevSchedule	401
+webdev.v1.WebDevService/ListCustomDomains	401
+webdev.v1.WebDevService/ListDatabaseRecords	401
+webdev.v1.WebDevService/ListDomainRecords	401
+
