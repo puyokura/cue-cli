@@ -396,3 +396,29 @@ fn hex_encode(bytes: &[u8]) -> String {
     s
 }
 
+
+/// `cue discover <service> <method>` — test whether a Connect route exists.
+///
+/// The service distinguishes a missing route (plain HTTP 404 without a Connect
+/// body) from an existing one (401/400 with a Connect body). That difference is
+/// the only oracle available before authentication, so this command exists to
+/// make the inventory check reproducible instead of ad hoc.
+pub fn discover(service: Option<&String>, methods: &[String]) -> Result<String, String> {
+    let service = service.ok_or("discover requires <service> (e.g. user.v1.UserAuthService)")?;
+    if methods.is_empty() {
+        return Err("discover requires at least one <method> name".into());
+    }
+    let origin = base();
+    let mut rows = Vec::new();
+    for method in methods {
+        let path = format!("/{service}/{method}");
+        match client::call_json(&origin, &path, None, &json!({})) {
+            Ok(_) => rows.push(json!({ "method": method, "exists": true, "status": "ok" })),
+            Err(err) => {
+                let exists = !(err.contains("HTTP 404") && !err.contains('['));
+                rows.push(json!({ "method": method, "exists": exists, "detail": err }));
+            }
+        }
+    }
+    Ok(pretty(&json!({ "service": service, "probes": rows })))
+}

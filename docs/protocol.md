@@ -214,3 +214,43 @@ Web クライアントは送信時に `convertObjectNames("server", …)` で ca
 `crates/cue-cli` は上記のうち、公開 RPC・proto コーデック・Bearer 認証・
 Socket.IO ハンドシェイク・`join_session` / `user_message` の送出までを実装済み。
 認証後の応答処理は実トークンが必要なため未検証（`docs/auth-status.md`）。
+
+## 9. 2FA（MFA）の実測
+
+アプリはログイン応答が MFA 要求になった場合、Web 側は `permissionDenied` の
+`debug.code = LOGIN_MFA_REQUIRED` を `loginMfaRequired` として受け、
+`/two-step-verification` へ遷移する。CLI 側は同じ判定を
+「ログイン RPC が返したエラーコード」で行う必要がある（未認証のため未実測）。
+
+### 9.1 MFA 系 RPC（実行時に発見。静的全数には載っていない）
+
+発見方法は 404/401 オラクル。`docs/rpc-discovered.txt` に一覧がある。
+
+| RPC | 認証 | 実フィールド |
+|---|---|---|
+| `user.v1.UserAuthService/GetMfaStatus` | 要 | 未取得（空本文で 401） |
+| `user.v1.UserAuthService/SetLoginMfa` | 要 | `enabled`（Web 実装の呼び出し形） |
+| `user.v1.UserAuthService/StartTotpEnrollment` | 要 | 未取得 |
+| `user.v1.UserAuthService/FinishTotpEnrollment` | 不要で検証まで到達 | `flow_id`(1), `code`(2, 6 文字以上) |
+| `user.v1.UserAuthService/DeleteTotp` | 要 | 未取得 |
+| `user.v1.UserAuthService/RegenerateRecoveryCodes` | 要 | 未取得 |
+| `user.v1.UserAuthService/StartPasskeyRegistration` | 要 | 未取得 |
+| `user.v1.UserAuthService/FinishPasskeyRegistration` | 不要で検証まで到達 | `flow_id`(1), `credential_json`(2) |
+| `user.v1.UserAuthService/ListPasskeys` | 要 | 未取得 |
+| `user.v1.UserAuthService/DeletePasskey` | 不要で検証まで到達 | `id`(1) |
+| `user.v1.UserAuthService/RenamePasskey` | 不要で検証まで到達 | `id`(1), `name`(2) |
+
+### 9.2 TOTP 登録の手順（Web 実装から）
+
+1. `StartTotpEnrollment` → `{flowId, otpauthUri, secret}`
+2. 認証アプリで QR（`otpauthUri`）を読み、6 桁コードを入力
+3. `FinishTotpEnrollment {flowId, code}` → 登録完了
+4. `SetLoginMfa {enabled:true}` → `{recoveryCodes}`（リカバリコードが返る）
+
+### 9.3 ログイン時の MFA チャレンジ
+
+コード検証は `LoginCueByPhoneCode` の応答側で判定する。実測では
+偽 ID + 偽コードで `400 / 1013 Incorrect verification code` が返り、
+MFA 要求かどうかは未認証では区別できなかった。
+`loginMfaRequired` に対応する公開 RPC（`VerifyLoginMfa` 等）は 404 で存在しない。
+MFA はログイン応答のエラーコードとして現れる設計と読めるが、**実アカウントでの確認は未実施**。

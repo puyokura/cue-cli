@@ -1,0 +1,27 @@
+# 実行時発見の RPC（静的全数には載っていない）
+#
+# 発見方法: 既知サービス配下の候補名を POST し、
+#   401 (Connect unauthenticated) または 400 (buf.validate) -> ルートが存在する
+#   404 + Connect 本文なし                                  -> ルートが存在しない
+# 静的全数 docs/rpc-inventory.txt は APK の文字列から抽出した 252 本。
+# 本ファイルはその外側を実行時に足したもの（出所が違うので分けて置く）。
+
+user.v1.UserAuthService/BindCuePhone	400
+user.v1.UserAuthService/DeletePasskey	400
+user.v1.UserAuthService/DeleteTotp	401
+user.v1.UserAuthService/DeleteUser	401
+user.v1.UserAuthService/FinishPasskeyRegistration	400
+user.v1.UserAuthService/FinishTotpEnrollment	400
+user.v1.UserAuthService/GenerateTempAuthCode	401
+user.v1.UserAuthService/GetCuePhoneAuthInfo	401
+user.v1.UserAuthService/GetMfaStatus	401
+user.v1.UserAuthService/ListLoginMethods	401
+user.v1.UserAuthService/ListPasskeys	401
+user.v1.UserAuthService/RegenerateRecoveryCodes	401
+user.v1.UserAuthService/RenamePasskey	400
+user.v1.UserAuthService/SetLoginMfa	401
+user.v1.UserAuthService/StartPasskeyRegistration	401
+user.v1.UserAuthService/StartTotpEnrollment	401
+user.v1.UserAuthService/UnbindLoginMethod	401
+user.v1.UserAuthService/UpdateEmail	400
+user.v1.UserAuthService/VerifyEmail	400

@@ -148,6 +148,19 @@ def main():
     check("phone help exits 0", rc == 0, err)
     check("phone help lists the four subcommands", out.count("cue phone") == 4, out[:300])
 
+    # 13. the discovery oracle must separate existing from missing routes
+    rc, out, err = run(
+        ["discover", "user.v1.UserAuthService", "GetMfaStatus", "CreateTotp"],
+        env_extra=env,
+    )
+    check("discover exits 0", rc == 0, err)
+    try:
+        probes = {p["method"]: p for p in json.loads(out)["probes"]}
+        check("discover finds GetMfaStatus", probes["GetMfaStatus"]["exists"] is True, out[:200])
+        check("discover rejects CreateTotp", probes["CreateTotp"]["exists"] is False, out[:200])
+    except (json.JSONDecodeError, KeyError):
+        check("discover output is JSON with probes", False, out[:200])
+
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
     print(f"\n{passed}/{total} checks passed")
