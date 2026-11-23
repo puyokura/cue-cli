@@ -167,7 +167,7 @@ pub fn phone(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<St
             let code = flags.get("code").ok_or("phone reset requires --code <sms code>")?;
             let password = read_secret("new password")?;
             let resp = crate::phone::reset_password(&base, id, code, &password)?;
-            Ok(pretty(&resp))
+            Ok(pretty(&redact(&resp)))
         }
         "help" => Ok(json!({
             "usage": [
@@ -281,7 +281,8 @@ pub fn rpc(method: Option<&String>, body: Option<&String>) -> Result<String, Str
     };
     let token = client::stored_token();
     let value = client::call_json(&base(), &path, token.as_deref(), &payload)?;
-    Ok(pretty(&value))
+    // `rpc` is the escape hatch: an arbitrary response can carry a live token.
+    Ok(pretty(&redact(&value)))
 }
 
 pub fn raw(method: Option<&String>, hex: Option<&String>) -> Result<String, String> {
@@ -754,5 +755,74 @@ fn describe(value: &Value) -> Value {
 }
 
 
+
+
+
+/// Strip credential-bearing fields from any response before it is printed.
+///
+/// A reset or login response can echo a token or a recovery code list. Printing
+/// the raw object would put a live credential into scrollback and logs, so the
+/// values are replaced with their existence and byte length.
+pub fn redact(value: &Value) -> Value {
+    const SECRET_KEYS: &[&str] = &[
+        "token", "session_id", "sessionid", "access_token", "accesstoken",
+        "refresh_token", "refreshtoken", "secret", "password", "recovery_codes",
+        "recoverycodes", "credential_json", "credentialjson", "private_key",
+    ];
+    match value {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::with_capacity(map.len());
+            for (k, v) in map {
+                if SECRET_KEYS.contains(&k.to_ascii_lowercase().as_str()) {
+                    let len = match v {
+                        Value::String(s) => s.len(),
+                        _ => 0,
+                    };
+                    out.insert(k.clone(), json!({ "redacted": true, "bytes": len }));
+                } else {
+                    out.insert(k.clone(), redact(v));
+                }
+            }
+            Value::Object(out)
+        }
+        Value::Array(items) => Value::Array(items.iter().map(redact).collect()),
+        other => other.clone(),
+    }
+}
+
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::redact;
+    use serde_json::json;
+
+    #[test]
+    fn top_level_secrets_are_masked() {
+        // `sessionId` carries a token in this API (the login response uses it), so it is masked too.
+        let v = json!({ "token": "abcdef", "sessionId": "s", "ok": true, "name": "n" });
+        let r = redact(&v);
+        assert_eq!(r["token"]["redacted"], true);
+        assert_eq!(r["token"]["bytes"], 6);
+        assert_eq!(r["sessionId"]["redacted"], true);
+        assert_eq!(r["ok"], true);
+        // A plain field stays readable.
+        assert_eq!(r["name"], "n");
+    }
+
+    #[test]
+    fn nested_secrets_are_masked() {
+        let v = json!({ "user": { "token": "xyz", "name": "n" }, "list": [{ "secret": "zz" }] });
+        let r = redact(&v);
+        assert_eq!(r["user"]["token"]["redacted"], true);
+        assert_eq!(r["user"]["name"], "n");
+        assert_eq!(r["list"][0]["secret"]["redacted"], true);
+    }
+
+    #[test]
+    fn non_secret_payloads_are_unchanged() {
+        let v = json!({ "path": "/x", "status": 400, "fields": ["a", "b"] });
+        assert_eq!(redact(&v), v);
+    }
+}
 
 

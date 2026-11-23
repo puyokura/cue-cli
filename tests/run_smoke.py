@@ -224,6 +224,18 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 16. a stored token must never appear in any command output.
+    #     Write a dummy token, then exercise a command's error path and inspect output.
+    state = tempfile.mkdtemp(prefix="cue-leak-")
+    token_path = os.path.join(state, "token")
+    sentinel = "LEAKCANARY0123456789"
+    with open(token_path, "w", encoding="utf-8") as fh:
+        fh.write(sentinel)
+    for cmd in (["whoami"], ["rpc", "user.v1.UserService/ListRegionCode"], ["methods"]):
+        rc, out, err = run(["--state", state] + cmd, env_extra=env)
+        check(f"no token leak: {cmd[0]}", sentinel not in out and sentinel not in err,
+              (out + err)[:120])
+
     # 15c. unknown flags must be rejected, and version must work
     rc, out, err = run(["whoami", "--bogus"], env_extra=env)
     check("unknown flag is rejected", rc == 2, f"rc={rc}")
@@ -258,6 +270,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

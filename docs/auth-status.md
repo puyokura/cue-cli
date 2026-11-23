@@ -185,3 +185,18 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 `residentKey: "required"` かつ `userVerification: "required"` なので、
 登録には端末のプラットフォーム認証器（Windows Hello / Touch ID / セキュリティキー）が要る。
 CLI 単体では完結しない。CLI は flow 発行と、端末が生成した credential JSON の送出までを担う。
+
+## 出力にトークンを出さない方策
+
+`cue rpc` と `cue phone reset` は任意の応答をそのまま表示し得るため、表示前に伏せ字を通す。
+
+- マスク対象キー: `token` / `sessionId` / `accessToken` / `refreshToken` / `secret` /
+  `password` / `recoveryCodes` / `credentialJson` / `privateKey`（大小無視）
+- 置換後の形は `{"redacted": true, "bytes": <元の文字数>}`。値そのものは出さない
+- 入れ子（オブジェクト・配列）も再帰的に処理する
+- 通常の読み取り応答（クレジット、リージョン、セッション等）は変化しない
+
+`sessionId` をマスク対象に含めているのは、この API のログイン応答が `sessionId` に
+トークンを入れているため。フィールド名だけで安全と判断しない。
+
+回帰は `tests/run_smoke.py` の「no token leak」3 件と、ユニットテスト 3 件で固定している。
