@@ -344,3 +344,25 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 結論: TOTP はサーバ側の機能ゲートで閉じており、クライアントからは開けられない。
 パスキーは開いているので、2FA の代替手段はそちらになる。断定できないのは、
 有料プランや別プロダクト面で開くかどうか（無料アカウントの 1 例しか測っていない）。
+
+## 課金・サブスクの実測（2026-11-23）
+
+| 面 | 実測 |
+|---|---|
+| `SubscriptionService/GetAgentsMembership` | 200。`membershipVersion: plus`、`planKey: agents_20_monthly`、`source: invitation`、`limitCredits: 5000`、`usedCredits: 6`、`remainingCredits: 4994` |
+| `SubscriptionService/GetAgentsAvailableCredits` | 200。`canStartUsage: true`、同じ membership を返す |
+| `SubscriptionService/GetResourceIAPCatalog` | `400 resource purchases require a mobile app`（モバイル限定） |
+| `SubscriptionService/GetAgentsResetBalance` | 200（`{}`） |
+| `user.v1.UserService/GetAvailableCredits` | 200。`totalCredits 1300`（free 1000 + 日次 300） |
+
+### 2 つの membership 面が食い違う
+
+`UserService/UserInfo` は `membershipVersion: free`、`membershipInfo: {"membershipVersion":"free"}` を返す。
+`SubscriptionService/GetAgentsMembership` は同じアカウントで `plus` / `agents_20_monthly` / `invitation` を返す。
+
+どちらも 200 で、値が違う。**同じ「membershipVersion」という名前で別の軸を表している**と解釈しているが、
+断定はしていない。`UserService` 側は Cue の個人プラン、`SubscriptionService` 側は Agents の
+クレジット枠、という別の概念の可能性がある。この食い違いは未解決として残す。
+
+`agents_20_monthly` は「月 20 ドルの Agents プラン」と読めるが、`source: invitation` なので
+招待による付与であり、課金の発生は確認していない。
