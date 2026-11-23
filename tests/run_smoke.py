@@ -224,6 +224,12 @@ def main():
           3 in replies and replies[3].get("result", {}).get("isError") is True,
           str(replies.get(3))[:160])
 
+    # 15i. `webdev-deploy` requires both identifiers before touching the network
+    rc, out, err = run(["webdev-deploy"], env_extra=env)
+    check("webdev-deploy needs --project", rc != 0 and "--project" in err, err[:120])
+    rc, out, err = run(["webdev-deploy", "--project", "x"], env_extra=env)
+    check("webdev-deploy needs --version", rc != 0 and "--version" in err, err[:120])
+
     # 15h. `webdev` rejects a non-numeric --limit locally
     rc, out, err = run(["webdev", "--limit", "abc"], env_extra=env)
     check("webdev with a bad limit fails", rc != 0, out)
@@ -284,6 +290,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

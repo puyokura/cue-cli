@@ -235,5 +235,27 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 | 割当ドメイン | `<name>.manus.space` が割り当てられるが、デプロイ前は 404 |
 | デプロイ RPC | `webdev.v1.WebDevService/DeployWebDevProject {project_id}` が存在（空ボディで `400 project_id is required`） |
 
-「作成 → プレビュー確認」までは実測で通る。**「デプロイ（公開）」は `DeployWebDevProject` を
-呼ぶ必要があり、状態変更なので本人確認なしに実行していない。**
+「作成 → プレビュー確認 → デプロイ → 公開 URL での配信確認」まで実測で通った（本人の承認を得て実行）。
+
+### デプロイの契約
+
+`webdev.v1.WebDevService/DeployWebDevProject` は 2 つのフィールドを要求する。
+
+- `project_id`（無いと `project_id is required`）
+- `version_id`（無いと `version_id is required`）。存在しない組は `404 project not found`
+
+`version_id` は `GetWebDevProject` の `checkpoints[].versionId`（8 桁の hex）。
+`status: CHECKPOINT_STATUS_SUCCESS` のチェックポイントを選ぶ。
+
+### 実測結果
+
+| 項目 | 値 |
+|---|---|
+| デプロイ前 | `WEB_DEV_PUBLICATION_STATE_DRAFT`、割当ドメインは 404 |
+| デプロイ後 | `WEB_DEV_PUBLICATION_STATE_LIVE` |
+| 公開 URL | `https://cuewebdev-rb7czyk2.manus.space/` |
+| 配信内容 | 200、2,905 B、要求した `cue-webdev-ok` を含む |
+| プレビューとの差 | プレビューは sandbox の URL（368,080 B の開発版）。公開はビルド済みの 2,905 B |
+
+プレビューと公開は別物である。プレビューが 200 でも、デプロイ前の公開ドメインは 404 を返す。
+

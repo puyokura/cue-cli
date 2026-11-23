@@ -905,3 +905,41 @@ pub fn webdev(limit: Option<&String>) -> Result<String, String> {
     )?;
     Ok(pretty(&redact(&value)))
 }
+
+/// `cue webdev-deploy --project <id> --version <id>` — publish a WebDev project.
+///
+/// Measured contract: `DeployWebDevProject` requires both `project_id` and
+/// `version_id`; `version_id` comes from `GetWebDevProject.checkpoints[]`.
+/// This publishes to the internet, so it is a separate, explicit command.
+pub fn webdev_deploy(
+    project: Option<&String>,
+    version: Option<&String>,
+) -> Result<String, String> {
+    let project = project.ok_or("webdev-deploy requires --project <projectId>")?;
+    let version = version.ok_or(
+        "webdev-deploy requires --version <versionId> (from `cue webdev --detail <projectId>`)",
+    )?;
+    let token = authed()?;
+    let origin = base();
+    let value = client::call_json(
+        &origin,
+        "/webdev.v1.WebDevService/DeployWebDevProject",
+        Some(&token),
+        &json!({ "project_id": project, "version_id": version }),
+    )?;
+    Ok(pretty(&redact(&value)))
+}
+
+/// `cue webdev --detail <projectId>` — read one project, including its checkpoints.
+pub fn webdev_detail(project: Option<&String>) -> Result<String, String> {
+    let project = project.ok_or("webdev --detail requires <projectId>")?;
+    let token = authed()?;
+    let origin = base();
+    let value = client::call_json(
+        &origin,
+        "/webdev.v1.WebDevService/GetWebDevProject",
+        Some(&token),
+        &json!({ "projectId": project }),
+    )?;
+    Ok(pretty(&redact(&value)))
+}

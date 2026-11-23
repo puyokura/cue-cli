@@ -66,7 +66,9 @@ Commands:
   send <session_id> --text <prompt>   join an existing session and post a prompt
   new --text <prompt>                 start a new session (id is generated locally)
   sandbox <session_id>                report the sandbox state for a session (read-only)
-  webdev [--limit n]                  list WebDev projects (read-only)
+  webdev [--limit n] [--detail <id>]  list WebDev projects or read one (read-only)
+  webdev-deploy --project <id> --version <id>
+                                      publish a WebDev project to its public domain
   join <session_id> [--seconds n]     subscribe to a session without posting
   methods                             print the static RPC inventory path
   discover <service> <method>...      probe whether Connect routes exist (404/401 oracle)
@@ -143,7 +145,8 @@ fn main() {
         "phone" => &["number", "purpose", "id", "code", "password", "state"],
         "mfa" => &["flow", "code", "credential", "name", "id", "state"],
         "join" => &["seconds", "frames", "locale", "verbose", "state"],
-        "webdev" => &["limit", "state"],
+        "webdev" => &["limit", "detail", "state"],
+        "webdev-deploy" => &["project", "version", "state"],
         "sandbox" => &["state"],
         "new" => &["text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
                   "country-iso", "verbose", "state"],
@@ -182,7 +185,14 @@ fn main() {
         "send" => commands::send(positional.first(), flags.get("text"), &flags),
         "new" => commands::new_session(flags.get("text"), &flags),
         "sandbox" => commands::sandbox(positional.first()),
-        "webdev" => commands::webdev(flags.get("limit")),
+        "webdev" => {
+            if let Some(pid) = flags.get("detail") {
+                commands::webdev_detail(Some(pid))
+            } else {
+                commands::webdev(flags.get("limit"))
+            }
+        },
+        "webdev-deploy" => commands::webdev_deploy(flags.get("project"), flags.get("version")),
         "join" => commands::join(positional.first(), &flags),
         "discover" => commands::discover(positional.first(), &positional[1..].to_vec()),
         "coverage" => commands::coverage(),
@@ -264,6 +274,7 @@ pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String>
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 
