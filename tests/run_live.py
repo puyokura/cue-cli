@@ -5,7 +5,11 @@ Every check is a real request to api.manus.im through the CLI binary. A check
 that fails for lack of permission is reported as SKIP with the service's own
 message, never as PASS — an untested path must not look verified.
 
-Usage: run_live.py [path-to-cue-binary] [--create-session]
+Usage: run_live.py [path-to-cue-binary] [--create-session] [--send]
+
+Side effects: with no flags this is read-only. `--create-session` creates a real
+session on the signed-in account and `--send` posts a real prompt, so both leave
+data behind. Skip them when the account must stay clean.
 """
 import json
 import os
