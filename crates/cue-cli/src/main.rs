@@ -5,8 +5,8 @@
 //!   * Connect RPC over POST /<package>.<Service>/<Method>
 //!   * `connect-protocol-version: 1`
 //!   * unary JSON (`application/json`) and unary proto (`application/proto`)
-//!   * `authorization: Bearer <token>` where token is the value the web client
-//!     stores as `sessionId`
+//!   * `authorization: Bearer <token>` where token is a service-issued bearer
+//!     token (the native login flows issue it; see docs/auth-status.md)
 
 use std::collections::HashMap;
 use std::env;
@@ -18,6 +18,7 @@ use serde_json::Value;
 mod chat;
 mod client;
 mod commands;
+mod phone;
 mod session;
 mod socket;
 
@@ -29,7 +30,13 @@ USAGE:
   cue <command> [args]
 
 Commands:
-  login --token <t> [--base <url>]   store bearer token (from the web client's sessionId)
+  login --token <t> [--base <url>]   store a service-issued bearer token
+  phone start --number <n> [--purpose login|reset_password]
+                                     send an SMS code; prints the verification id
+  phone verify --id <v> --code <c>   exchange the SMS code for a session token
+  phone password --number <n>       log in with a phone number and password
+                                     (password is read from stdin when omitted)
+  phone reset --id <v> --code <c>    set a new password (read from stdin)
   logout                              remove stored token
   whoami                              user.v1.UserService/UserInfo
   settings                            user.v1.UserPublicService/GetGlobalSettings (no auth)
@@ -77,6 +84,7 @@ fn main() {
 
     let result = match cmd {
         "login" => commands::login(flags.get("token"), flags.get("base")),
+        "phone" => commands::phone(positional.first(), &flags),
         "logout" => commands::logout(),
         "whoami" => commands::whoami(),
         "settings" => commands::settings(),

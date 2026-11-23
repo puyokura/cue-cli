@@ -16,6 +16,14 @@ use std::time::Duration;
 /// Default service origin. `--base` and `CUE_BASE_URL` override it.
 pub const DEFAULT_BASE: &str = "https://api.manus.im";
 
+/// Product identity the service uses to enable its native client surface.
+///
+/// Measured: without this header `SendCuePhoneCode` answers
+/// `403 / 400232 "Phone authentication is not available for this account"`;
+/// with `x-product-name: manus-agents` the same call proceeds to phone-number
+/// validation. The value is the one the Android client sends.
+pub const PRODUCT_NAME: &str = "manus-agents";
+
 fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
@@ -28,6 +36,7 @@ fn agent() -> ureq::Agent {
 fn default_headers(token: Option<&str>) -> Vec<(String, String)> {
     let mut h = vec![
         ("connect-protocol-version".into(), "1".into()),
+        ("x-product-name".into(), PRODUCT_NAME.into()),
         ("x-client-type".into(), "CUE".into()),
         ("x-client-version".into(), "1.2.0".into()),
         (

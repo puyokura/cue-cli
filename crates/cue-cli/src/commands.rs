@@ -16,7 +16,7 @@ const GET_SESSION: &str = "/session.v1.SessionService/GetSession";
 const LIST_AGENTS: &str = "/agents.v1.AgentsService/ListAgentsV2";
 
 pub fn login(token: Option<&String>, base: Option<&String>) -> Result<String, String> {
-    let token = token.ok_or("login requires --token <value> (the web client's sessionId)")?;
+    let token = token.ok_or("login requires --token <value> (a bearer token issued by the service)")?;
     let token = token.trim();
     if token.is_empty() {
         return Err("--token is empty".into());
@@ -49,6 +49,108 @@ pub fn logout() -> Result<String, String> {
         fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
     }
     Ok(json!({ "removed": existed, "path": path.display().to_string() }).to_string())
+}
+
+/// Persist a token only after the service proves it works.
+fn store_verified_token(origin: &str, token: &str) -> Result<Value, String> {
+    let user = client::call_json(origin, USER_INFO, Some(token), &json!({}))
+        .map_err(|e| format!("token rejected, nothing stored: {e}"))?;
+    let dir = crate::state_dir()?;
+    let path = dir.join("token");
+    fs::write(&path, token).map_err(|e| format!("write {}: {e}", path.display()))?;
+    let base_path = dir.join("base");
+    fs::write(&base_path, origin).map_err(|e| format!("write {}: {e}", base_path.display()))?;
+    Ok(user)
+}
+
+/// `cue phone <start|verify|password|reset>` — the native SMS login path.
+pub fn phone(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+    let sub = sub.map(String::as_str).unwrap_or("help");
+    let base = base();
+
+    match sub {
+        "start" => {
+            let number = flags
+                .get("number")
+                .ok_or("phone start requires --number <e164>")?;
+            let purpose = match flags.get("purpose") {
+                Some(p) => crate::phone::parse_purpose(p)?,
+                None => crate::phone::Purpose::Login,
+            };
+            let req = crate::phone::send_code(&base, number, purpose)?;
+            Ok(pretty(&json!({
+                "verificationId": req.verification_id,
+                "expiresInSeconds": req.expires_in_seconds,
+                "retryAfterSeconds": req.retry_after_seconds,
+                "purpose": match purpose {
+                    crate::phone::Purpose::Login => "login",
+                    crate::phone::Purpose::ResetPassword => "reset_password",
+                },
+            })))
+        }
+        "verify" => {
+            let id = flags
+                .get("id")
+                .ok_or("phone verify requires --id <verificationId>")?;
+            let code = flags.get("code").ok_or("phone verify requires --code <sms code>")?;
+            let resp = crate::phone::login_with_code(&base, id, code)?;
+            let token = crate::phone::extract_token(&resp)?;
+            let user = store_verified_token(&base, &token)?;
+            Ok(pretty(&json!({
+                "stored": true,
+                "user": user.get("user").cloned().unwrap_or(Value::Null),
+            })))
+        }
+        "password" => {
+            let number = flags
+                .get("number")
+                .ok_or("phone password requires --number <e164>")?;
+            let password = match flags.get("password") {
+                Some(p) => p.clone(),
+                None => read_secret("password")?,
+            };
+            let resp = crate::phone::login_with_password(&base, number, &password)?;
+            let token = crate::phone::extract_token(&resp)?;
+            let user = store_verified_token(&base, &token)?;
+            Ok(pretty(&json!({
+                "stored": true,
+                "user": user.get("user").cloned().unwrap_or(Value::Null),
+            })))
+        }
+        "reset" => {
+            let id = flags
+                .get("id")
+                .ok_or("phone reset requires --id <verificationId>")?;
+            let code = flags.get("code").ok_or("phone reset requires --code <sms code>")?;
+            let password = read_secret("new password")?;
+            let resp = crate::phone::reset_password(&base, id, code, &password)?;
+            Ok(pretty(&resp))
+        }
+        "help" => Ok(json!({
+            "usage": [
+                "cue phone start --number +8190... [--purpose login|reset_password]",
+                "cue phone verify --id <verificationId> --code <sms code>",
+                "cue phone password --number +8190...",
+                "cue phone reset --id <verificationId> --code <sms code>",
+            ],
+        })
+        .to_string()),
+        other => Err(format!("unknown phone subcommand: {other}")),
+    }
+}
+
+/// Read one line from stdin without echoing it to the terminal.
+fn read_secret(label: &str) -> Result<String, String> {
+    eprint!("{label}: ");
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|e| format!("read {label}: {e}"))?;
+    let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
+    if trimmed.is_empty() {
+        return Err(format!("{label} is empty"));
+    }
+    Ok(trimmed)
 }
 
 fn base() -> String {
@@ -189,7 +291,7 @@ pub fn watch(
             "clientVersion".to_string(),
             "1.2.0".to_string(),
         ),
-        ("x-product-name".to_string(), "cue".to_string()),
+        ("x-product-name".to_string(), crate::client::PRODUCT_NAME.to_string()),
     ];
 
     let mut out: Vec<String> = Vec::new();
@@ -293,3 +395,4 @@ fn hex_encode(bytes: &[u8]) -> String {
     }
     s
 }
+

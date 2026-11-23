@@ -123,6 +123,31 @@ def main():
     check("send without token exits non-zero", rc != 0, out)
     check("send explains the missing token", "no token" in err, err)
 
+    # 11. the Cue product header must open the phone surface.
+    #     With it, a malformed number reaches business validation (400230).
+    #     Without it, the same call is refused as 400232. The CLI always sends
+    #     the header, so this asserts the CLI's behaviour, not the server's.
+    rc, out, err = run(
+        ["rpc", "user.v1.UserAuthPublicService/SendCuePhoneCode",
+         "--json", '{"phoneNumber":"+","purpose":1}'],
+        env_extra=env,
+    )
+    check("phone code call reaches validation", rc != 0, out)
+    check("phone gate is open for the CLI", "400230" in err, err)
+    check("phone gate is not closed (no 400232)", "400232" not in err, err)
+
+    # 12. phone subcommands refuse to run without their required flags
+    rc, out, err = run(["phone", "start"], env_extra=env)
+    check("phone start without --number fails", rc != 0, out)
+    check("phone start names the missing flag", "--number" in err, err)
+
+    rc, out, err = run(["phone", "verify"], env_extra=env)
+    check("phone verify without --id fails", rc != 0, out)
+
+    rc, out, err = run(["phone", "help"], env_extra=env)
+    check("phone help exits 0", rc == 0, err)
+    check("phone help lists the four subcommands", out.count("cue phone") == 4, out[:300])
+
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
     print(f"\n{passed}/{total} checks passed")

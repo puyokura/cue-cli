@@ -30,7 +30,7 @@ cue region                    # 公開 RPC（認証不要）
 cue rpc user.v1.UserPublicService/GetExchangeInfo
 cue raw user.v1.UserPublicService/CheckRegion   # proto コーデック
 cue watch --seconds 10        # Socket.IO を開いてフレームを観測
-cue login --token <sessionId> # Web クライアントの localStorage["sessionId"]
+cue login --token <token>     # サービスが発行した Bearer トークン（Web 経由は非対応）
 cue whoami
 cue sessions --limit 20
 cue send <session_id> --text "やあ"   # join_session + user_message を送出

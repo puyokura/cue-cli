@@ -49,7 +49,7 @@ pub fn run(plan: Plan<'_>, out: &mut dyn FnMut(&str)) -> Result<Outcome, String>
         ("tz".to_string(), "Asia/Tokyo".to_string()),
         ("clientType".to_string(), "CUE".to_string()),
         ("clientVersion".to_string(), "1.2.0".to_string()),
-        ("x-product-name".to_string(), "cue".to_string()),
+        ("x-product-name".to_string(), crate::client::PRODUCT_NAME.to_string()),
     ];
 
     let mut request = format!(
@@ -281,3 +281,4 @@ fn urlencode(s: &str) -> String {
     }
     out
 }
+

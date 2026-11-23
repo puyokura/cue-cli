@@ -1,114 +1,86 @@
-# 認証の現状と、通すために必要なもの
+# 認証: ネイティブ経路（Web 経由は不採用）
 
-2026-11-23 時点の実測。ここに書いた以外の経路は試していない。
+方針: **CLI の認証はアプリ本体と同じネイティブ経路で完結させる。ブラウザ・Web セッションのトークン流用は使わない。**
+（本人指示 2026-11-23: 「CLIでweb経由のログインは嫌いだ」。ブラウザで同意させる補助ツールは削除済み。）
 
-## 通る経路: ブラウザの Google 同意のみ
+## 訂正: 電話認証は「閉じていない」
 
-`user.v1.UserAuthPublicService/Oauth2Authorize {"type":1}` が 200 で同意 URL を返す。
+以前この文書に「サーバ側のアカウントフラグで閉じており、クライアントからは開放できない」と書いた。**これは誤りだった。撤回する。**
 
-```
-https://accounts.google.com/o/oauth2/auth
-  ?access_type=offline
-  &client_id=362133815767-ohl3m6958nbtn2j092984r9nakj4f5eg.apps.googleusercontent.com
-  &include_granted_scopes=true
-  &prompt=select_account
-  &redirect_uri=https%3A%2F%2Fapi.manus.im%2Fapi%2Foauth2_callback%2Fgoogle
-  &response_type=code
-  &scope=openid .../userinfo.email .../userinfo.profile
-  &state=<22 文字>
-```
+原因は `x-product-name` ヘッダ。付けずに呼ぶと Manus 系のプロダクト面に落ち、
+`403 / 400232 "Phone authentication is not available for this account"` が返る。
+Cue（`ai.manus.agents`）の値 `manus-agents` を付けると、同じリクエストが
+Cue 面に入り、通常の検証に進む。
 
-フロー:
+実測（同一の本文・同一の番号、ヘッダのみ差分）:
 
-1. `Oauth2Authorize` で同意 URL を得る（state 発行）
-2. ブラウザで同意 → Google → `api.manus.im/api/oauth2_callback/google?code=…&state=…`
-3. コールバックがセッションを確立し、`https://manus.im/...` へ 302 で戻す
-4. そのブラウザセッションの `localStorage["sessionId"]` が Bearer トークン
-
-実測した制約:
-
-- `redirect_uri` はサーバ固定。`rea-cue://callback` や `https://example.com/cb` は
-  `400 invalid auth redirect url` で拒否。相対パス `/auth_landing` のみ受理。
-  → **CLI が直接コールバックを受ける経路は作れない。**
-- state は使い捨て。`code=bogus&state=<valid>` は
-  `302 https://manus.im/login?errMessage=We+couldn%27t+complete+sign-in+with+the+provider.`、
-  `state=y` では `Your sign-in session has expired.` に 302。
-- 署名付き `id_token`（`GoogleGSIAuth`）は audience 検証まで進む:
-  `400 validate google id_token failed: idtoken: audience provided does not match aud claim`。
-
-## 通らない経路と、その理由（すべて実測）
-
-### 電話 + SMS（本人が先に調べたいと言った経路）
-
-`SendCuePhoneCode` / `LoginCueByPhoneCode` / `LoginCueByPhonePassword` は
-**403 permission_denied, 400232 "Phone authentication is not available for this account"**。
-
-切り分けの結果、リクエスト側の要素はすべて無関係:
-
-| 変えた軸 | 値 | 結果 |
+| リクエスト | `x-product-name` なし | `x-product-name: manus-agents` |
 |---|---|---|
-| 電話番号の国 | JP/US/SG/GB/CN/IN/KR/TW/HK/DE | 不変 |
-| `X-Forwarded-For` | JP/SG/US/GB/CN | 不変（`CheckRegion` は XFF を正しく反映） |
-| `x-client-type` | agents/cue/CUE/mobile/android/flutter/ios/web/app/desktop | 不変 |
-| `x-product-name` | cue / manus | 不変 |
-| Origin | manus.im / cue.im | 不変 |
-| User-Agent | okhttp / Cue | 不変 |
-| Authorization | なし / 不正 Bearer | 不変 |
-| 本文 | `authCommandCmd` / `userId` 追加 | 不変 |
-| `purpose` | 1, 2（3 は enum 違反） | 1,2 とも 403 |
+| `SendCuePhoneCode {"phone_number":"+","purpose":1}` | 403 / 400232 | **400 / 400230「国コード付きの有効な番号を入力」** |
+| `SendCuePhoneCode {"phone_number":"+819012345678","purpose":1}` | 403 / 400232 | **200 `{verificationId, expiresInSeconds:299, retryAfterSeconds:60}`** |
+| `LoginCueByPhoneCode`（偽 ID + 偽コード） | 403 / 400232 | **400 / 1013「Incorrect verification code」** |
+| `LoginCueByPhonePassword`（不正な番号） | 403 / 400232 | **400 / 400230** |
+| `ResetCuePhonePassword`（偽 ID + 偽コード） | 403 / 400232 | **400 / 1013** |
 
-エラー詳細の protobuf は `field1=400232`, `field2="Phone authentication is not available for this account"`。
-
-`CheckRegion` の proto を復号すると field 9 が **JP=3 / US=1 / SG=1** と異なる
-（`privacyPageType` の差）。リージョン別設定が存在することの証拠だが、
-電話ゲートがリージョンで開くかは**確認していない**。
-
-APK 側にも `Phone authentication unavailable` という表示文字列があり、
-`GetCuePhoneAuthInfo` という「電話認証の可否を問い合わせる」RPC が存在する
-（要認証のため未実行）。
-
-**結論: サーバ側のアカウント／機能フラグ。クライアントからは開放できない。
-前進には本人のアカウント状態の確認（アプリ上の表示、サポート照会）が要る。**
-
-### メール + パスワード
+## 検証とゲートの順序（実測）
 
 ```
-LoginByEmail {"email":..., "password":...}                    -> 400 1715 "Need CAPTCHA code!"
-LoginByEmail {..., "captchaCode":"x"}                          -> 400 1015 "CAPTCHA verification failed"
-LoginByEmail {..., "captcha":{"value":"x","type":"cloudflare"}} -> 400 1715（フィールド名が違う）
+1. リクエスト検証 (buf.validate)   -> 空本文なら 400 + 「phone_number: must be at least 1 characters」
+2. プロダクトゲート                -> x-product-name が Cue でなければ 403 / 400232
+3. 業務検証                        -> 番号形式なら 400 / 400230、コード不一致なら 400 / 1013
 ```
 
-Cloudflare Turnstile。sitekey は Web バンドルに埋まっている
-（prod: `0x4AAAAAAA_sd0eRNCinWBgU`、cue 側: `0x4AAAAAAA_s…`）。
-Turnstile はブラウザでしか解けず、CLI からは通せない。
+1 が先に走るため、空本文を送る全数ハーベスト（252 本）では
+400232 と 400230 の差が出ない。ゲートを可視化するには
+「min_len は満たすが形式が不正」な本文が必要だった。
 
-`x-client-dcr` は Web 実装から再現できる（`tools/dcr.py`）。
-ただし CAPTCHA が先に要求されるため、dcr だけでは通らない。
+## レート制限
 
-### メール新規登録
+`SendCuePhoneCode` は 1 番号あたり 60 秒間隔（応答の `retryAfterSeconds`）。
+超えると `429 / 400233 "Too many attempts. Please try again later"`。
+ハーベスト中の連投で実際に踏んだ。
+
+## ネイティブアプリが備えるログイン手段
 
 ```
-RegisterByEmail {"email":...,"password":...,"verifyCode":"123456","name":...}
-  -> 400 "incorrect verification code"
+Continue with Google / Apple / Email / phone / Manus / Microsoft / Singpass
 ```
 
-コード送信 RPC は公開されていない（`SendEmailVerifyCodeWithAuth` は要認証、
-`SendXxx` 系の推測名はすべて 404）。登録は Web の Turnstile 付き画面が前提。
+## 経路ごとの現状
 
-### Google ID トークン（GSI）
+| 経路 | RPC | 状態 |
+|---|---|---|
+| 電話 + SMS コード | `SendCuePhoneCode` → `LoginCueByPhoneCode` | **通る**（プロダクトヘッダ必須。実コードでの完走は未実施） |
+| 電話 + パスワード | `LoginCueByPhonePassword` | **通る**（同上） |
+| パスワード再設定 | `ResetCuePhonePassword` | 検証まで到達 |
+| メール + パスワード | `LoginByEmail` | Turnstile 必須（`captchaCode` フィールド） |
+| メール新規登録 | `RegisterByEmail` | 検証コードが必要。送信 RPC は非公開 |
+| Google（ID トークン） | `GoogleGSIAuth` | aud 検証まで到達。期待 aud は Web 型クライアント ID |
+| Google（アクセストークン） | `GoogleAppOauthCallback` | 実 access_token 必須 |
+| Apple / Microsoft / SSO / Facebook | `Oauth2Authorize type=2,3,4,5` | Apple は同意 URL を返す。Microsoft は版要求。SSO は組織ドメインのみ。Facebook は廃止 |
 
-`GoogleGSIAuth` は aud 検証まで到達する。正規の Google サインインで得た
-id_token が必要で、それ自体がブラウザ操作を要する。
+## 電話ログインの CLI 実装
 
-## つまり
+`crates/cue-cli/src/phone.rs` と `commands::phone`。
 
-CLI から自前でログインを完結させる経路は、現時点で**存在しない**。
-Turnstile とサーバ固定 redirect_uri がその理由で、どちらも迂回ではなく
-サービス側の設計として閉じている。
+```
+cue phone start --number +8190... [--purpose login|reset_password]
+  -> {"verificationId": "...", "expiresInSeconds": 299, "retryAfterSeconds": 60}
 
-通すための現実的な選択肢は 3 つ:
+cue phone verify --id <verificationId> --code <sms code>
+  -> トークンを取り、UserInfo で検証してから保存
 
-1. 本人がブラウザでログインし、`localStorage["sessionId"]` を `cue login --token` に渡す
-2. ブラウザを CDP で操作する補助ツールを同梱し、同意とトークン取得を自動化する
-   （Turnstile が通るかは未検証）
-3. 電話認証の開放を待つ／サポートに確認する（サーバ側の状態変更が前提）
+cue phone password --number +8190...      （パスワードは stdin から読む）
+cue phone reset --id <verificationId> --code <sms code>
+```
+
+トークンは保存前に `user.v1.UserService/UserInfo` で検証する。
+不正トークンを残さない方針は `login --token` と共通。
+
+## 未実施（本人の電話番号とコードが要る）
+
+- 実番号への SMS 送信と、届いたコードでの `LoginCueByPhoneCode` 完走
+- 上記で得たトークンを使った認証付き RPC（セッション一覧・送信・telecom 等）
+- 2FA の有無と方式（ログイン応答に `loginMfaRequired` 相当のイベントがあるかは未確認）
+
+実番号を使うか、パスワード経路で先に通すかは本人の判断。

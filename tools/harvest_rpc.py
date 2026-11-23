@@ -28,6 +28,7 @@ def post(path, body: bytes, content_type="application/json"):
         headers={
             "content-type": content_type,
             "connect-protocol-version": "1",
+            "x-product-name": "manus-agents",
             "user-agent": UA,
             "accept": "*/*",
         },
@@ -177,4 +178,5 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
