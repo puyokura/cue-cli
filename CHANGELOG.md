@@ -38,3 +38,16 @@
 
 
 
+
+### 配布物の実測
+
+Release v0.1.0 に添付した 3 資産を取得して中身を確認した。
+
+| 資産 | 中身 | 形式 |
+|---|---|---|
+| `cue-linux-x86_64.tar.gz` | `cue`（3,463,368 B）+ README + LICENSE + CHANGELOG | ELF64, machine 0x3e (x86-64) |
+| `cue-macos-aarch64.tar.gz` | `cue`（3,018,080 B）+ README + LICENSE + CHANGELOG | Mach-O 64, cpu 0xc (arm64) |
+| `cue-windows-x86_64.zip` | `cue.exe`（3,232,256 B）+ README + LICENSE + CHANGELOG | PE、`cue version` が exit 0 で `cue 0.1.0` |
+
+Linux と macOS は開発ホスト（Windows）では実行できないため、形式の確認までで止めた。
+Windows 版は展開後に実際に起動して `version` を確認している。
