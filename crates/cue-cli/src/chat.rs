@@ -17,36 +17,47 @@
 
 use serde_json::{json, Map, Value};
 
-/// Convert camelCase keys to snake_case exactly like the web client does.
-/// Already-snake keys pass through unchanged.
-pub fn camel_to_snake(key: &str) -> String {
-    let mut out = String::with_capacity(key.len() + 4);
-    for (i, ch) in key.chars().enumerate() {
-        if ch.is_ascii_uppercase() {
-            if i > 0 {
-                out.push('_');
-            }
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
 
 /// Recursively normalise every object key to snake_case.
+/// Normalise a frame for the wire.
+///
+/// Measured correction: the chat gateway accepts **camelCase** keys on the wire,
+/// not snake_case. A snake_case `user_message` is answered with
+/// `agent_error code=1 "You are not allowed to perform this action."`, while the
+/// same payload in camelCase is accepted and the agent replies. (The web client's
+/// internal `convertObjectNames` call is a store-level transform, not a wire one.)
 pub fn to_wire(value: &Value) -> Value {
     match value {
         Value::Object(map) => {
             let mut out = Map::with_capacity(map.len());
             for (k, v) in map {
-                out.insert(camel_to_snake(k), to_wire(v));
+                out.insert(camelize(k), to_wire(v));
             }
             Value::Object(out)
         }
         Value::Array(items) => Value::Array(items.iter().map(to_wire).collect()),
         other => other.clone(),
     }
+}
+
+/// Convert a snake_case key to camelCase, leaving already-camel keys untouched.
+pub fn camelize(key: &str) -> String {
+    if !key.contains('_') {
+        return key.to_string();
+    }
+    let mut out = String::with_capacity(key.len());
+    let mut upper_next = false;
+    for ch in key.chars() {
+        if ch == '_' {
+            upper_next = true;
+        } else if upper_next {
+            out.push(ch.to_ascii_uppercase());
+            upper_next = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 /// Build the `user_message` frame for a text prompt.
@@ -64,22 +75,31 @@ pub fn user_message(
     let mut payload = json!({
         "type": "user_message",
         "id": id,
-        "session_id": session_id,
+        "sessionId": session_id,
         "timestamp": timestamp_ms(),
-        "message_type": message_type,
-        "task_mode": task_mode,
+        "messageType": message_type,
+        "taskMode": task_mode,
         "content": content,
         "contents": [{ "type": "text", "value": content }],
         "attachments": [],
-        "delivery_mode": delivery_mode,
+        "deliveryMode": delivery_mode,
     });
     if let Some(iso) = country_iso {
-        payload["country_iso_code"] = Value::from(iso);
+        payload["countryIsoCode"] = Value::from(iso);
     }
+    // The web client always sends `extData`. Measured: a payload without it is
+    // accepted once the keys are camelCase, but the fields below are what the
+    // client normally sends and they pin the deployment target to a sandbox.
+    payload["extData"] = json!({
+        "mode": "standard",
+        "executionTarget": { "kind": "sandbox" },
+        "psBindings": [],
+        "capabilities": { "enabledSkills": [] },
+    });
     if let Some(Value::Object(extra_map)) = extra {
         if let Value::Object(base) = &mut payload {
             for (k, v) in extra_map {
-                base.insert(camel_to_snake(&k), v);
+                base.insert(k.clone(), v);
             }
         }
     }
@@ -90,8 +110,8 @@ pub fn user_message(
 pub fn join_session(session_id: &str, last_message_id: &str) -> Value {
     json!({
         "type": "join_session",
-        "session_id": session_id,
-        "last_message_id": last_message_id,
+        "sessionId": session_id,
+        "lastMessageId": last_message_id,
         "version": 2,
     })
 }
@@ -108,29 +128,33 @@ pub fn timestamp_ms() -> u64 {
 /// (`Date.now().toString(36).substring(3)` + random base36). It identifies the
 /// message within the session; uniqueness, not secrecy, is what matters.
 pub fn message_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
-    let ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let head = base36(ms as u64);
-    let head = if head.len() > 3 { &head[3..] } else { &head[..] };
-    let tail = base36((ms as u64).wrapping_mul(2654435761) % 36u64.pow(5));
-    format!("{head}{tail}")
-}
 
-fn base36(mut n: u64) -> String {
-    const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    if n == 0 {
-        return "0".to_string();
+    // Measured: the server rejects ids that are not exactly 22 base62 characters
+    // ("data/user_message/id must match pattern ^[A-Za-z0-9]{22}$"). The web client
+    // builds one from the millisecond timestamp in base36 plus random padding; a
+    // 64-bit nanosecond value plus a counter is unique and always 22 digits.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut state = millis
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407)
+        .wrapping_add(seq.wrapping_mul(0x9E3779B97F4A7C15));
+    let mut out = String::with_capacity(22);
+    for _ in 0..22 {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        out.push(ALPHABET[(state >> 60) as usize & 0x3F] as char);
     }
-    let mut s = Vec::new();
-    while n > 0 {
-        s.push(DIGITS[(n % 36) as usize]);
-        n /= 36;
-    }
-    s.reverse();
-    String::from_utf8(s).unwrap_or_default()
+    out
 }
 
 #[cfg(test)]
@@ -138,29 +162,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn snake_conversion_matches_client() {
-        assert_eq!(camel_to_snake("sessionId"), "session_id");
-        assert_eq!(camel_to_snake("countryIsoCode"), "country_iso_code");
-        assert_eq!(camel_to_snake("x-product-name"), "x-product-name");
-        assert_eq!(camel_to_snake("already_snake"), "already_snake");
+    fn camelize_handles_the_key_shapes_we_send() {
+        assert_eq!(camelize("country_iso_code"), "countryIsoCode");
+        assert_eq!(camelize("id"), "id");
+        assert_eq!(camelize("x-product-name"), "x-product-name");
+        assert_eq!(camelize("sessionId"), "sessionId");
     }
 
     #[test]
-    fn payload_nested_keys_are_converted() {
+    fn payload_nested_keys_stay_camel_on_the_wire() {
+        // Measured: snake_case keys are rejected by the gateway, camelCase accepted.
         let v = json!({ "sessionId": "s", "extData": { "maxEffort": "max" } });
         let w = to_wire(&v);
-        assert_eq!(w["session_id"], "s");
-        assert_eq!(w["ext_data"]["max_effort"], "max");
+        assert_eq!(w["sessionId"], "s");
+        assert_eq!(w["extData"]["maxEffort"], "max");
+        assert_eq!(camelize("execution_target"), "executionTarget");
     }
 
     #[test]
     fn user_message_matches_observed_shape() {
         let m = user_message("id1", "sess", "hi", "standard", "text", "interrupt", Some("JP"), None);
         assert_eq!(m["type"], "user_message");
-        assert_eq!(m["session_id"], "sess");
-        assert_eq!(m["message_type"], "text");
-        assert_eq!(m["country_iso_code"], "JP");
+        assert_eq!(m["sessionId"], "sess");
+        assert_eq!(m["messageType"], "text");
+        assert_eq!(m["taskMode"], "standard");
+        assert_eq!(m["deliveryMode"], "interrupt");
+        assert_eq!(m["countryIsoCode"], "JP");
         assert_eq!(m["contents"][0]["type"], "text");
+        assert_eq!(m["extData"]["executionTarget"]["kind"], "sandbox");
         assert!(m["timestamp"].as_u64().unwrap() > 1_600_000_000_000);
     }
 
@@ -172,8 +201,27 @@ mod tests {
     }
 
     #[test]
-    fn message_id_has_expected_length() {
-        let id = message_id();
-        assert!(id.len() >= 10 && id.len() <= 24, "id was {id}");
+    fn message_id_matches_server_pattern() {
+        // Measured constraint: ^[A-Za-z0-9]{22}$
+        for _ in 0..1000 {
+            let id = message_id();
+            assert_eq!(id.len(), 22, "id was {id}");
+            assert!(
+                id.chars().all(|c| c.is_ascii_alphanumeric()),
+                "id was {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn message_ids_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..1000 {
+            assert!(seen.insert(message_id()), "duplicate id generated");
+        }
     }
 }
+
+
+
+

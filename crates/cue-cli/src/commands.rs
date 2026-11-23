@@ -578,3 +578,52 @@ pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<Stri
     }
 }
 
+
+/// `cue join <session_id>` — subscribe to a session and observe what the server
+/// sends, without posting a prompt. Used to verify session subscription and the
+/// event replay (`eventsNotifyEventsAfter`) separately from message sending.
+pub fn join(session_id: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+    let session_id = session_id.ok_or("join requires <session_id>")?;
+    let token = client::stored_token()
+        .ok_or_else(|| "no token; run `cue login` first".to_string())?;
+    let seconds: u64 = match flags.get("seconds") {
+        Some(s) => s.parse().map_err(|_| "--seconds must be a number")?,
+        None => 20,
+    };
+    let max_frames: usize = match flags.get("frames") {
+        Some(s) => s.parse().map_err(|_| "--frames must be a number")?,
+        None => 80,
+    };
+    let locale = flags.get("locale").cloned().unwrap_or_else(|| "ja-JP".into());
+    let ws_base = match std::env::var("CUE_WS_URL") {
+        Ok(v) if !v.trim().is_empty() => v.trim_end_matches('/').to_string(),
+        _ => "wss://api.manus.im".to_string(),
+    };
+
+    let plan = crate::session::Plan {
+        base_ws: &ws_base,
+        token: Some(token.as_str()),
+        locale: &locale,
+        join_session: Some(session_id.as_str()),
+        prompt: None,
+        task_mode: "standard",
+        delivery_mode: "interrupt",
+        country_iso: None,
+        seconds,
+        max_frames,
+        verbose: flags.contains_key("verbose"),
+    };
+
+    let mut out: Vec<String> = Vec::new();
+    let outcome = crate::session::run(plan, &mut |line| out.push(line.to_string()))?;
+    out.push(String::new());
+    out.push(format!(
+        "summary: engine_open={} namespace_ok={} joined={} events={} chat_frames={}",
+        outcome.engine_open, outcome.namespace_ok, outcome.joined,
+        outcome.events, outcome.chat_frames
+    ));
+    if let Some(err) = outcome.namespace_error {
+        out.push(format!("namespace_error: {err}"));
+    }
+    Ok(out.join("\n"))
+}

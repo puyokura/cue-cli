@@ -216,10 +216,55 @@ fn record_event(name: &str, args: &Value, outcome: &mut Outcome, out: &mut dyn F
     let payload = args.get(0).cloned().unwrap_or(Value::Null);
     let kind = payload.get("type").and_then(Value::as_str).unwrap_or("");
 
+    // Server frames are `{"type":"event","sessionId":...,"event":{...}}`.
+    if kind == "event" {
+        let event = payload.get("event").cloned().unwrap_or(Value::Null);
+        let event_type = event.get("type").and_then(Value::as_str).unwrap_or("");
+        match event_type {
+            "chat" => {
+                outcome.chat_frames += 1;
+                let sender = event.get("sender").and_then(Value::as_str).unwrap_or("?");
+                let text = extract_text(&event);
+                let line = format!("chat[{sender}] {}", truncate(&text, 400));
+                outcome.transcript.push(line.clone());
+                out(&line);
+            }
+            "chatDelta" => {
+                let delta = event
+                    .get("delta")
+                    .and_then(|d| d.get("content"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if !delta.is_empty() {
+                    out(&format!("delta {}", truncate(delta, 200)));
+                }
+            }
+            "agent_error" => {
+                let code = event.get("code").cloned().unwrap_or(Value::Null);
+                let message = event.get("message").and_then(Value::as_str).unwrap_or("");
+                let line = format!("agent_error code={code} {message}");
+                outcome.transcript.push(line.clone());
+                out(&line);
+            }
+            "statusUpdate" => {
+                let status = event.get("agentStatus").and_then(Value::as_str).unwrap_or("");
+                out(&format!("status {status}"));
+            }
+            "liveStatus" => {
+                let text = event.get("text").and_then(Value::as_str).unwrap_or("");
+                if !text.is_empty() {
+                    out(&format!("liveStatus {text}"));
+                }
+            }
+            other => out(&format!("{other}")),
+        }
+        return;
+    }
+
     match kind {
         "chat" => {
             outcome.chat_frames += 1;
-            let event = payload.get("event").cloned().unwrap_or(Value::Null);
+            let event = payload.clone();
             let event_type = event.get("type").and_then(Value::as_str).unwrap_or("");
             let text = extract_text(&event);
             let line = format!("chat[{event_type}] {}", truncate(&text, 400));
@@ -228,10 +273,7 @@ fn record_event(name: &str, args: &Value, outcome: &mut Outcome, out: &mut dyn F
         }
         "agent_error" => {
             let code = payload.get("code").cloned().unwrap_or(Value::Null);
-            let message = payload
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let message = payload.get("message").and_then(Value::as_str).unwrap_or("");
             let line = format!("agent_error code={code} {message}");
             outcome.transcript.push(line.clone());
             out(&line);

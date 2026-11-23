@@ -22,9 +22,11 @@ results = []
 
 
 def run(args, stdin_data=None):
+    # The CLI emits UTF-8 JSON; the Windows console default (cp932) mangles it.
     proc = subprocess.run([BIN] + args, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace",
                           timeout=180, input=stdin_data)
-    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+    return proc.returncode, (proc.stdout or "").strip(), (proc.stderr or "").strip()
 
 
 def check(name, kind, detail=""):
@@ -69,13 +71,18 @@ def main():
     data = as_json(out)
     kind = "PASS" if rc == 0 and data is not None else ("SKIP" if "401" in err else "FAIL")
     check("list sessions", kind, err[:120] if kind != "PASS" else "")
+    # ListSessions returns {} on a fresh account; the populated list lives in
+    # SearchAgentSessions. Record both so an empty result is not read as a fault.
+    rc, out, err = run(["rpc", "session.v1.SessionService/SearchAgentSessions",
+                        "--json", '{"query":"","limit":20}'])
+    search = as_json(out) or {}
+    items = search.get("sessions") or []
+    check("search sessions", "PASS" if rc == 0 and items else "SKIP",
+          f"count={len(items)}")
     session_uid = None
-    if data:
-        items = data.get("sessions") or data.get("items") or []
-        if items:
-            session_uid = items[0].get("sessionUid") or items[0].get("sessionId")
-        check("sessions payload has entries", "PASS" if items else "SKIP",
-              f"count={len(items)}")
+    if items:
+        session_uid = items[0].get("uid")
+        check("session uid is 22 chars", len(session_uid or "") == 22, str(session_uid))
 
     # 3. agents
     rc, out, err = run(["agents", "--limit", "5"])
@@ -112,6 +119,27 @@ def main():
     check("socket namespace accepts token",
           "PASS" if "namespace connected" in out else "FAIL",
           (err or out)[:160])
+
+    # 9. session subscription: join must be acknowledged with the event replay
+    if session_uid:
+        rc, out, err = run(["join", session_uid, "--seconds", "15", "--frames", "80"])
+        check("join subscription is accepted",
+              "PASS" if "eventsNotifyEventsAfter" in out and "agent_error" not in out
+              else "FAIL", (err or out)[:160])
+    else:
+        check("join subscription is accepted", "SKIP", "no session to join")
+
+    # 10. prompt round trip: send, then confirm the agent replied
+    if session_uid and "--send" in sys.argv:
+        rc, out, err = run(["send", session_uid, "--text",
+                            "reply with the single word: ok",
+                            "--seconds", "45", "--frames", "160"])
+        replied = "chat[assistant]" in out
+        check("prompt is accepted and answered",
+              "PASS" if replied else "FAIL", (err or out)[:200])
+    else:
+        check("prompt is accepted and answered", "SKIP",
+              "not requested (--send)")
 
     passed = sum(1 for _, k, _ in results if k == "PASS")
     skipped = sum(1 for _, k, _ in results if k == "SKIP")

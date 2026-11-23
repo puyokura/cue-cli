@@ -298,3 +298,43 @@ MFA はログイン応答のエラーコードとして現れる設計と読め�
 `404` でも Connect 本文（`{"code":"not_found",...}`）が返る場合は「ルートは存在し、
 対象レコードが無い」を意味する。オラクルは本文の有無で判定するので、
 `CheckInvitationCodeRemains` のような業務 404 を誤って「存在しない」と判定しない。
+
+## 11. チャット socket の実測（訂正あり）
+
+### 11.1 ワイヤ上のキーは camelCase
+
+以前この文書に「ワイヤは snake_case」と書いた。**誤り。撤回する。**
+
+実測: `user_message` を snake_case（`session_id` / `message_type` / `ext_data`）で送ると
+`agent_error code=1 "You are not allowed to perform this action."` が返る。
+同じ内容を camelCase（`sessionId` / `messageType` / `extData`）で送ると受理され、
+エージェントが返信する。Web 実装の `convertObjectNames("server", …)` は
+ストア内部の変換であり、ワイヤの形式ではなかった。
+
+`join_session` も同じ。snake_case では上記の拒否、camelCase では
+`eventsNotifyEventsAfter` でイベント列が返る。
+
+### 11.2 受信フレーム
+
+```
+42["message",{"type":"event","sessionId":"<sid>","timestamp":<ms>,
+              "event":{ "type":"chat" | "chatDelta" | "statusUpdate" | "liveStatus" | ... },
+              "webdevAddonEnabled":false}]
+```
+
+- `chat`: `sender`（`user` / `assistant`）、`content`、`messageEventId`
+- `chatDelta`: `delta.content`、`finished`
+- `statusUpdate`: `agentStatus`（`running` / `stopped`）
+- `liveStatus`: `text`、`statusKind`
+- `eventsNotifyEventsAfter`: 参加時に過去イベントをまとめて返す
+
+### 11.3 メッセージ ID の制約
+
+サーバは `^[A-Za-z0-9]{22}$` を要求する。短い ID は
+`400 data/user_message/id must match pattern` で拒否される。
+
+### 11.4 セッション一覧の所在
+
+`session.v1.SessionService/ListSessions` は新規アカウントで `{}` を返す。
+実際の一覧は `session.v1.SessionService/SearchAgentSessions {query, limit}` にあり、
+`sessions[].uid` が 22 文字のセッション ID。

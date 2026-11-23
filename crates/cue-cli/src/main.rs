@@ -50,6 +50,7 @@ Commands:
   raw <service.Method> [--bytes <hex>] call any Connect RPC over proto
   watch [--seconds n] [--frames n]    Socket.IO session: observe frames
   send <session_id> --text <prompt>   join a session and post a prompt
+  join <session_id> [--seconds n]     subscribe to a session without posting
   methods                             print the static RPC inventory path
   discover <service> <method>...      probe whether Connect routes exist (404/401 oracle)
 ",
@@ -100,6 +101,7 @@ fn main() {
         "raw" => commands::raw(positional.first(), flags.get("bytes")),
         "watch" => commands::watch(flags.get("seconds"), flags.get("frames"), flags.get("locale")),
         "send" => commands::send(positional.first(), flags.get("text"), &flags),
+        "join" => commands::join(positional.first(), &flags),
         "discover" => commands::discover(positional.first(), &positional[1..].to_vec()),
         "methods" => commands::methods(),
         "--help" | "-h" | "help" => {
@@ -143,6 +145,7 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 
