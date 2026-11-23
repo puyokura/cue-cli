@@ -320,3 +320,27 @@ CLI 単体では完結しない。CLI は flow 発行と、端末が生成した
 有効化は状態変更であり、また番号の割当を伴うため実行していない。
 `RequestPhoneAvailability` が `registered: true` を返すのは、国単位の可用性フラグであり、
 アカウントに番号が割り当て済みという意味ではない（`ListPhoneInfo` は 0 件）。
+
+## TOTP 400279 の切り分け結果（2026-11-23）
+
+`StartTotpEnrollment` の `400279 MFA_NOT_AVAILABLE` が、認証・時間・アカウント属性の
+どれに依存するかを実測で切り分けた。
+
+| 条件 | 結果 |
+|---|---|
+| 未認証で叩く | `401 unauthenticated`（認証が先に評価される） |
+| 認証済みで叩く | `400 400279 MFA_NOT_AVAILABLE` |
+| 数時間後に再試行 | 同じ 400279（時間依存ではない） |
+| `x-product-name` を manus-agents / cue / manus / なし | 4 通りすべて同じ |
+| 同じ認証で `StartPasskeyRegistration` | **200**（flow を発行） |
+
+つまり **認証は通っており、同じ認証でパスキーは開いている。TOTP だけが閉じている。**
+アカウント属性は `userType: USER_TYPE_PERSONAL`、`membershipVersion: free`、`isAlpha: true`。
+
+`GetMfaStatus` の proto を復号すると `field=4 varint=10` のみで、`loginMfa`(3) と
+`loginMfaAvailable`(5 相当) は送られていない。Web 側はこの 2 つで可否を判定するため、
+サーバが省略している＝両方 false という意味になる。
+
+結論: TOTP はサーバ側の機能ゲートで閉じており、クライアントからは開けられない。
+パスキーは開いているので、2FA の代替手段はそちらになる。断定できないのは、
+有料プランや別プロダクト面で開くかどうか（無料アカウントの 1 例しか測っていない）。
