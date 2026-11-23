@@ -48,6 +48,10 @@ def walk(buf, depth=0, max_depth=6):
             return
 
 
+# --- usage guard ---
+if len(sys.argv) < 2:
+    print("usage: walk_pb.py <protobuf-file>", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     path = sys.argv[1]
     depth = int(sys.argv[2]) if len(sys.argv) > 2 else 6

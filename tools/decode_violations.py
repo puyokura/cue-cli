@@ -53,6 +53,10 @@ def walk(buf, depth=0, max_depth=5):
     return rows
 
 
+# --- usage guard ---
+if len(sys.argv) < 3:
+    print("usage: decode_violations.py <responses.json> <rpc_path>", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     src, path = sys.argv[1], sys.argv[2]
     entries = json.load(open(src, encoding="utf-8"))

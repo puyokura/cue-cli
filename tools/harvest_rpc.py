@@ -16,6 +16,11 @@ import time
 import urllib.error
 import urllib.request
 
+# --- usage guard ---
+if len(sys.argv) < 3:
+    print("usage: harvest_rpc.py <rpc_paths.txt> <out.json>", file=sys.stderr)
+    raise SystemExit(2)
+
 BASE = "https://api.manus.im"
 UA = "cue-re/0.1 (schema harvest)"
 

@@ -102,6 +102,10 @@ def read_frames(sock, seconds):
     return out
 
 
+# --- usage guard ---
+if len(sys.argv) < 2:
+    print("usage: join_socket.py <session_id> [--token-file PATH]", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     session_id = sys.argv[1]
     tok = token()

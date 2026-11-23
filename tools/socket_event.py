@@ -96,6 +96,10 @@ def read_frames(sock, seconds):
     return out
 
 
+# --- usage guard ---
+if len(sys.argv) < 3:
+    print("usage: socket_event.py <event_name> <json_payload> [--wait SECONDS]", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     event = sys.argv[1]
     payload = json.loads(sys.argv[2])

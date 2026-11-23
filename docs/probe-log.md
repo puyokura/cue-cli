@@ -186,3 +186,12 @@ python tests/run_smoke.py        # 18/18 PASS
 - 書き換え前の全 ref は `tmp/pre-scrub-backup.bundle` に退避（`.gitignore` 済みで追跡外）
 
 数値・件数・状態名・エラーコードは伏せていない。再現に必要な事実であり、個人識別にはならない。
+
+## 10. ツールの起動時の作法
+
+`tools/` の各スクリプトは、引数不足なら使い方を 1 行出して終了コード 2 で止まる。
+Traceback を出さないのは、読む人が引数の形を知る前に例外を読まされるのを避けるため。
+
+- 確認は `Get-ChildItem tools -Filter *.py | ForEach-Object { python $_.FullName }` で全件
+- 既存 14 本は 2026-11-23 に統一した（`harvest_rpc.py` だけは個別に挿入）
+- 新しく足すツールも同じ形にする

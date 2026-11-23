@@ -83,6 +83,10 @@ def decode_violations(b64):
     return out
 
 
+# --- usage guard ---
+if len(sys.argv) < 3:
+    print("usage: harvest_fields.py <responses.json> <out.tsv>", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     src, dst = sys.argv[1], sys.argv[2]
     entries = json.load(open(src, encoding="utf-8"))

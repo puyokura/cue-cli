@@ -31,6 +31,10 @@ def probe(host, path):
     return first, body.decode("utf-8", "replace")
 
 
+# --- usage guard ---
+if len(sys.argv) < 2:
+    print("usage: probe_ws.py <host> [--seconds N]", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     host = sys.argv[1]
     for path in sys.argv[2:]:

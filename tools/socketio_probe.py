@@ -100,6 +100,10 @@ def recv_frames(sock, deadline):
     return out
 
 
+# --- usage guard ---
+if len(sys.argv) < 2:
+    print("usage: socketio_probe.py <token-file> [--seconds N]", file=sys.stderr)
+    raise SystemExit(2)
 def main():
     host = sys.argv[1]
     path = sys.argv[2]
