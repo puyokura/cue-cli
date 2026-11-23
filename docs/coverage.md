@@ -20,6 +20,8 @@
 | WebDev 生成 | 実測済み | 静的プロジェクト作成、プレビュー 200 |
 | WebDev デプロイ | 実測済み | `WEB_DEV_PUBLICATION_STATE_LIVE`、公開ドメイン 200 |
 | telecom 読み取り | 実測済み | 14 か国、JP レート 40 credits/min、無料電話 available |
+| デスクトップ端末一覧 | 実測済み | 1 台（`deviceId` / `deviceName` / `configVersion`） |
+| スペース | 実測済み | `PageGetUserSpaces` は `total: 1` |
 | コネクタ一覧 | 実測済み | 20 件（Shopify / GitHub / Outlook ほか）。接続済み 0 件 |
 | コネクタ接続 | 未検証 | OAuth 同意が要る（外部アカウントの認可） |
 | 課金・サブスク読み取り | 実測済み | Agents 枠 5000、残 4994、planKey `agents_20_monthly`（source: invitation） |
@@ -34,5 +36,6 @@
 - 「不可」はクライアントの努力で開けないもの。サーバ側の機能ゲート。
 - 「未検証」は経路が存在し契約も分かっているが、資格情報や端末操作が要るもの。
 - 未検証を実測済みとして扱わない。README と CHANGELOG もこの区別に合わせている。
+
 
 
