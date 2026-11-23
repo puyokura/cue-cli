@@ -19,6 +19,8 @@ Cue（`ai.manus.agents`）の API を独立クライアントから扱うため�
 | `crates/cue-cli/` | Rust 製 CLI（Connect RPC の JSON / proto、Socket.IO チャット） |
 | `tools/` | 静的解析・実サービス probe 用スクリプト（Python, 標準ライブラリのみ） |
 | `tests/run_smoke.py` | 実サービスに対する CLI の実プロセス検証 |
+| `tests/run_live.py` | ログイン後の認証付き検証（未認証なら即座に失敗する） |
+| `CHANGELOG.md` | 実測済み／未検証の範囲の記録 |
 
 ## 使い方（CLI）
 
@@ -77,7 +79,14 @@ Socket.IO の 101 ハンドシェイクと名前空間拒否、電話ゲート�
 
 ## ライセンス
 
-AGPL-3.0-or-later。`LICENSE` を参照。
+AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
+`SPDX-License-Identifier: AGPL-3.0-or-later` を置いている。
 
-本リポジトリは非公式の独立実装であり、Manus / Butterfly Effect とは関係がない。
-各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
+- 本リポジトリのコード・文書・解析ツールはすべて同じ条件で利用できる。
+- AGPL 第 13 条に従い、ネットワーク越しに提供する改変版は対応するソースを利用者に提供すること。
+- 本リポジトリは非公式の独立実装であり、Manus / Butterfly Effect とは関係がない。
+- 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
+- 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
+  （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+

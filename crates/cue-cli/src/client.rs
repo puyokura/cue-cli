@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Connect RPC transport for api.manus.im.
 //!
 //! Observed behaviour (see docs/protocol.md): a POST with
@@ -168,3 +169,4 @@ fn truncate(s: &str, max: usize) -> String {
 pub fn empty() -> Value {
     json!({})
 }
+

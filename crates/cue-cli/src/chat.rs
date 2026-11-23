@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Chat gateway frames over the Socket.IO `message` event.
 //!
 //! Facts taken from the shipped Android client and the web client bundle
@@ -221,6 +222,7 @@ mod tests {
         }
     }
 }
+
 
 
 

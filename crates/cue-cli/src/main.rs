@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Cue CLI — independent client for the Cue (ai.manus.agents) service.
 //!
 //! Wire protocol facts are taken from the shipped Android client and confirmed
@@ -147,6 +148,7 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 

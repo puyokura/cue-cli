@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Subcommands. Every command prints JSON so output stays machine-readable
 //! and nothing here invents values the service did not return.
 
@@ -702,4 +703,5 @@ fn describe(value: &Value) -> Value {
         other => json!(other.to_string()),
     }
 }
+
 

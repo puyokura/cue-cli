@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Socket.IO (Engine.IO v4) client for `wss://api.manus.im`.
 //!
 //! Observed behaviour (see docs/protocol.md §6):
@@ -273,3 +274,4 @@ mod tests {
         assert!(matches!(decode("3"), Frame::Pong));
     }
 }
+

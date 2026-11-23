@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! One chat-socket session: connect, authenticate, optionally join a session,
 //! optionally post a prompt, then stream the server's event frames.
 //!
@@ -323,4 +324,5 @@ fn urlencode(s: &str) -> String {
     }
     out
 }
+
 

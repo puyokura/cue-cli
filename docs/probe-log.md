@@ -157,3 +157,18 @@ route + method + zod request schema を抽出 → `docs/rest-routes.txt`。
 cargo build --manifest-path crates/cue-cli/Cargo.toml
 python tests/run_smoke.py        # 18/18 PASS
 ```
+
+## 8. 記録時の伏せ字ルール
+
+実測値をそのまま文書に残すと、アカウント固有の識別子が配布物に混ざる。以下は必ず伏せる。
+
+| 種類 | 例 | 記録の仕方 |
+|---|---|---|
+| 表示名・メール | `displayname`, `<name>@bot.cue.im` | 「値を返す」とだけ書き、値は書かない |
+| 電話番号 | `+81 **** 2516` | 「`phoneBound: true`、下 4 桁のみ」のように性質だけ書く |
+| セッション uid | 22 文字の base62 | 「22 文字の uid」と書く |
+| サンドボックス id | `<id>-<hash>` | 「`sandboxId` を返す」と書く |
+| ユーザー id | 18 桁の数字 | 書かない |
+| トークン | `Bearer …` | 絶対に書かない。存在だけ記す |
+
+数値・件数・状態名・エラーコードは伏せない。それらは再現に必要な事実で、個人識別にはならない。

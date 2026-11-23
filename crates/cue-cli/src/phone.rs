@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //! Phone (SMS) authentication, the native login path the Android client uses.
 //!
 //! Measured contract (see docs/auth-status.md):
@@ -187,3 +188,4 @@ mod tests {
         assert!(extract_token(&json!({"ok": true})).is_err());
     }
 }
+

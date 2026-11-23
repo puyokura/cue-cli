@@ -91,12 +91,12 @@ cue phone reset --id <verificationId> --code <sms code>
 
 | 面 | RPC / 操作 | 実測 |
 |---|---|---|
-| ユーザー | `UserService/UserInfo` | 200。displayname `<name>`, `phoneNumber`, `smsVerified: true` |
+| ユーザー | `UserService/UserInfo` | 200。displayname・phoneNumber・`smsVerified: true` を返す（値は伏せる） |
 | ユーザー | `GetAvailableCredits` | 200。`totalCredits 1300`（free 1000 + 日次 300） |
 | ユーザー | `GetUserClientConfig` | 200（`{}`） |
 | ユーザー | `ListRegionCode` | 200 |
-| ユーザー | `GetCuePhoneAuthInfo` | 200。`phoneBound: true`, `maskedPhoneNumber: +81 **** <last4>` |
-| セッション | `SearchAgentSessions` | 200。1 件 `<session uid>`（`ListSessions` は `{}` を返す） |
+| ユーザー | `GetCuePhoneAuthInfo` | 200。`phoneBound: true`・`maskedPhoneNumber`（+81 の下 4 桁のみ、値は伏せる） |
+| セッション | `SearchAgentSessions` | 200。1 件（22 文字の uid。`ListSessions` は `{}` を返す） |
 | セッション | `GetSession` | 200。owner / READ_WRITE / `SESSION_STATUS_STOPPED` |
 | セッション | chat socket `join_session` | 200相当。`eventsNotifyEventsAfter` でイベント列が返る |
 | セッション | chat socket `user_message` | **受理され、エージェントが返信する**（例: "Pong! 👋"） |
@@ -135,7 +135,7 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 
 | 面 | RPC | 実測 |
 |---|---|---|
-| エージェントメール | `TelecomService/ListAgentEmails` | 200。3 件（`<prefix>@`, `<name>@`, `<prefix>-<id>@` `bot.cue.im`） |
+| エージェントメール | `TelecomService/ListAgentEmails` | 200。3 件（`<prefix>@bot.cue.im` 形式） |
 | メール名前空間 | `TelecomService/GetAgentEmailNamespace` | 200。`baseDomain: bot.cue.im` |
 | クラウドPC リージョン | `CloudPCService/ListAvailableRegions` | 200。5 件（us-east1, us-west1, asia-southeast1 ほか） |
 | webdev | `WebDevService/ListWebDevProjects` | 200（`{}`・プロジェクト0件） |
@@ -146,7 +146,7 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 ## 沙箱（sandbox）の実測
 
 - セッションの `defaultSandbox.status` は `STATUS_RUNNING`（`GetSession`）
-- 最新の `sandboxUpdate` イベントに `sandboxId: <sandbox id>`、
+- 最新の `sandboxUpdate` イベントに `sandboxId`（`<id>-<hash>` 形式）、
   `vncUrl: wss://5901-…sg3.manus.computer/vnc`、`webRTCUrl: https://8333-…/?embed=1` が入る
 - `GET /api/chat/getSandboxStatus` は **403 Permission denied 10002**（`AgentServerError`）。
   `sessionId` と `sandboxUrl` の両方を実値にしても同じ。`getSessionV2` は同じトークンで 200 なので、
@@ -154,3 +154,5 @@ TOTP はサーバ側の機能フラグで閉じている（電話の 400232 と�
 - サンドボックスホスト自体は到達する（`iyw…` は 400、`8333-iyw…` は 502。ただし上記の理由で未操作）
 
 沙箱の起動・操縦（`startSandbox` / VNC 接続）は状態変更を伴うため未実行。本人確認待ち。
+
+
