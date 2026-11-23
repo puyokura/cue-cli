@@ -627,3 +627,73 @@ pub fn join(session_id: Option<&String>, flags: &HashMap<String, String>) -> Res
     }
     Ok(out.join("\n"))
 }
+
+/// `cue coverage` — read-only survey of the authenticated surface.
+///
+/// Only GET-like reads are issued. Every entry records the service's own answer,
+/// so an empty object is reported as an empty state rather than as a failure.
+pub fn coverage() -> Result<String, String> {
+    let token = authed()?;
+    let origin = base();
+
+    let probes: Vec<(&str, &str, serde_json::Value)> = vec![
+        ("user info", "/user.v1.UserService/UserInfo", json!({})),
+        ("client config", "/user.v1.UserService/GetUserClientConfig", json!({})),
+        ("credits", "/user.v1.UserService/GetAvailableCredits", json!({})),
+        ("region codes", "/user.v1.UserService/ListRegionCode", json!({})),
+        ("phone auth info", "/user.v1.UserAuthService/GetCuePhoneAuthInfo", json!({})),
+        ("login methods", "/user.v1.UserAuthService/ListLoginMethods", json!({})),
+        ("mfa status", "/user.v1.UserAuthService/GetMfaStatus", json!({})),
+        ("passkeys", "/user.v1.UserAuthService/ListPasskeys", json!({})),
+        ("trusted phones", "/user.v1.UserAuthService/ListCueTrustedPhoneNumbers", json!({})),
+        ("sessions", "/session.v1.SessionService/SearchAgentSessions", json!({"query":"","limit":20})),
+        ("agents", "/agents.v1.AgentsService/ListAgentsV2", json!({"agentsLimit":20,"channelsLimit":20})),
+        ("skills", "/skill.v1.SkillService/ListSkills", json!({})),
+        ("connectors", "/connectors.v1.ConnectorsService/ListConnectors", json!({})),
+        ("notifications", "/notifier.v1.NotificationService/GetNotificationListV2", json!({"limit":20})),
+        ("team", "/team.v1.TeamService/ListTeam", json!({"page":1,"pageSize":10})),
+        ("cloud pcs", "/cloud_pc.v1.CloudPCService/List", json!({"limit":20})),
+        ("phone numbers", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
+        ("remote control", "/device_authorization.v1.DeviceAuthorizationService/ListRemoteControlGrants", json!({})),
+    ];
+
+    let mut rows = Vec::new();
+    for (label, path, body) in probes {
+        match client::call_json(&origin, path, Some(&token), &body) {
+            Ok(value) => {
+                let shape = describe(&value);
+                rows.push(json!({ "check": label, "rpc": path, "ok": true, "shape": shape }));
+            }
+            Err(err) => {
+                rows.push(json!({ "check": label, "rpc": path, "ok": false, "error": err }));
+            }
+        }
+    }
+
+    let passed = rows.iter().filter(|r| r["ok"] == json!(true)).count();
+    Ok(pretty(&json!({
+        "passed": passed,
+        "total": rows.len(),
+        "checks": rows,
+    })))
+}
+
+/// Summarise a response without inventing content: counts for arrays, key names for objects.
+fn describe(value: &Value) -> Value {
+    match value {
+        Value::Object(map) if map.is_empty() => json!("{} (empty state)"),
+        Value::Object(map) => {
+            let mut summary = Vec::new();
+            for (k, v) in map {
+                match v {
+                    Value::Array(items) => summary.push(format!("{k}:{} items", items.len())),
+                    Value::Object(_) => summary.push(format!("{k}:object")),
+                    _ => summary.push(format!("{k}:scalar")),
+                }
+            }
+            json!(summary.join(", "))
+        }
+        Value::Array(items) => json!(format!("{} items", items.len())),
+        other => json!(other.to_string()),
+    }
+}

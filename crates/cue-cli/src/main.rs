@@ -53,6 +53,7 @@ Commands:
   join <session_id> [--seconds n]     subscribe to a session without posting
   methods                             print the static RPC inventory path
   discover <service> <method>...      probe whether Connect routes exist (404/401 oracle)
+  coverage                            read-only survey of the authenticated surface
 ",
         version = env!("CARGO_PKG_VERSION")
     );
@@ -103,6 +104,7 @@ fn main() {
         "send" => commands::send(positional.first(), flags.get("text"), &flags),
         "join" => commands::join(positional.first(), &flags),
         "discover" => commands::discover(positional.first(), &positional[1..].to_vec()),
+        "coverage" => commands::coverage(),
         "methods" => commands::methods(),
         "--help" | "-h" | "help" => {
             usage();
@@ -145,6 +147,7 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 
 

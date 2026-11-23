@@ -129,6 +129,18 @@ def main():
     else:
         check("join subscription is accepted", "SKIP", "no session to join")
 
+    # 9b. read-only coverage survey over the authenticated surface
+    rc, out, err = run(["coverage"])
+    cov = as_json(out)
+    if cov and cov.get("checks"):
+        failed = [c["check"] for c in cov["checks"] if not c.get("ok")]
+        check("coverage survey runs", "PASS" if rc == 0 else "FAIL", err[:120])
+        check("coverage has no failed probes", "PASS" if not failed else "FAIL", str(failed))
+        check("coverage covers >= 18 surfaces", "PASS" if cov["total"] >= 18 else "FAIL",
+              str(cov["total"]))
+    else:
+        check("coverage survey runs", "FAIL", (err or out)[:160])
+
     # 10. prompt round trip: send, then confirm the agent replied
     if session_uid and "--send" in sys.argv:
         rc, out, err = run(["send", session_uid, "--text",
