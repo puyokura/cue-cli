@@ -15,7 +15,49 @@ const LIST_SESSIONS: &str = "/session.v1.SessionService/ListSessions";
 const GET_SESSION: &str = "/session.v1.SessionService/GetSession";
 const LIST_AGENTS: &str = "/agents.v1.AgentsService/ListAgentsV2";
 
+/// `cue login` with no `--token` runs the whole native phone login interactively,
+/// so one process invocation takes the user from a phone number to a stored token.
+fn login_interactive(base_flag: Option<&String>) -> Result<String, String> {
+    let origin = client::resolve_base(base_flag);
+
+    eprintln!("Cue login (native phone path). Ctrl-C to abort.");
+    let number = match read_line("phone number (E.164, e.g. +819012345678): ")? {
+        Some(n) => n,
+        None => return Err("phone number is required".into()),
+    };
+
+    let req = crate::phone::send_code(&origin, &number, crate::phone::Purpose::Login)
+        .map_err(|e| format!("could not send the SMS code: {e}"))?;
+    eprintln!(
+        "SMS sent (verificationId {}).{}",
+        req.verification_id,
+        match req.expires_in_seconds {
+            Some(s) => format!(" Valid for {s}s."),
+            None => String::new(),
+        }
+    );
+
+    let code = match read_line("SMS code: ")? {
+        Some(c) => c,
+        None => return Err("SMS code is required".into()),
+    };
+
+    let resp = crate::phone::login_with_code(&origin, &req.verification_id, &code)
+        .map_err(|e| format!("login rejected: {e}"))?;
+    let token = crate::phone::extract_token(&resp)?;
+    let user = store_verified_token(&origin, &token)?;
+
+    Ok(pretty(&json!({
+        "stored": true,
+        "base": origin,
+        "user": user.get("user").cloned().unwrap_or(Value::Null),
+    })))
+}
+
 pub fn login(token: Option<&String>, base: Option<&String>) -> Result<String, String> {
+    if token.is_none() {
+        return login_interactive(base);
+    }
     let token = token.ok_or("login requires --token <value> (a bearer token issued by the service)")?;
     let token = token.trim();
     if token.is_empty() {
@@ -140,17 +182,27 @@ pub fn phone(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<St
 }
 
 /// Read one line from stdin without echoing it to the terminal.
-fn read_secret(label: &str) -> Result<String, String> {
-    eprint!("{label}: ");
+/// Read one line from stdin and return it trimmed. EOF returns `None` so the
+/// caller can decide whether an empty answer is fatal.
+fn read_line(prompt: &str) -> Result<Option<String>, String> {
+    eprint!("{prompt}");
     let mut line = String::new();
-    std::io::stdin()
+    let read = std::io::stdin()
         .read_line(&mut line)
-        .map_err(|e| format!("read {label}: {e}"))?;
-    let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
-    if trimmed.is_empty() {
-        return Err(format!("{label} is empty"));
+        .map_err(|e| format!("read input: {e}"))?;
+    if read == 0 {
+        return Ok(None);
     }
-    Ok(trimmed)
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(trimmed.to_string()))
+    }
+}
+
+fn read_secret(label: &str) -> Result<String, String> {
+    read_line(&format!("{label}: "))?.ok_or_else(|| format!("{label} is empty"))
 }
 
 fn base() -> String {

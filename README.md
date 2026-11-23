@@ -25,6 +25,12 @@ Cue（`ai.manus.agents`）の API を独立クライアントから扱うため�
 ```
 cargo build --release --manifest-path crates/cue-cli/Cargo.toml
 
+# ログインは 1 プロセスで完結する（引数なしで対話入力）
+crates/cue-cli/target/release/cue login
+#   phone number (E.164, e.g. +819012345678): <番号を入力>
+#   SMS code: <届いた 6 桁を入力>
+#   -> トークンを検証してから保存し、user を表示する
+
 cue settings                  # 公開 RPC（認証不要）
 cue region                    # 公開 RPC（認証不要）
 cue rpc user.v1.UserPublicService/GetExchangeInfo

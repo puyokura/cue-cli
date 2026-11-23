@@ -30,7 +30,7 @@ USAGE:
   cue <command> [args]
 
 Commands:
-  login --token <t> [--base <url>]   store a service-issued bearer token
+  login [--token <t>] [--base <url>]  no --token: interactive phone+SMS login
   phone start --number <n> [--purpose login|reset_password]
                                      send an SMS code; prints the verification id
   phone verify --id <v> --code <c>   exchange the SMS code for a session token
@@ -143,5 +143,6 @@ pub fn state_dir() -> Result<PathBuf, String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
 
 

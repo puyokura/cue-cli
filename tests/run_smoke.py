@@ -21,7 +21,7 @@ BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
 results = []
 
 
-def run(args, expect_ok=True, env_extra=None):
+def run(args, expect_ok=True, env_extra=None, stdin_data=None):
     env = dict(os.environ)
     if env_extra:
         env.update(env_extra)
@@ -31,6 +31,7 @@ def run(args, expect_ok=True, env_extra=None):
         text=True,
         timeout=120,
         env=env,
+        input=stdin_data,
     )
     out = proc.stdout.strip()
     err = proc.stderr.strip()
@@ -172,6 +173,13 @@ def main():
     rc, out, err = run(["mfa", "status"], env_extra=env)
     check("mfa status without token fails", rc != 0, out)
     check("mfa status explains the missing token", "no token" in err, err)
+
+    # 15. interactive `login` must not hang or send an SMS when given no input.
+    #     It reads the phone number from stdin; EOF has to fail fast instead.
+    rc, out, err = run(["login"], env_extra=env, stdin_data="")
+    check("interactive login fails without input", rc != 0, out)
+    check("interactive login names the missing number", "phone number" in err, err)
+    check("interactive login never claims an SMS was sent", "SMS sent" not in err, err)
 
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
