@@ -195,3 +195,18 @@ Traceback を出さないのは、読む人が引数の形を知る前に例外�
 - 確認は `Get-ChildItem tools -Filter *.py | ForEach-Object { python $_.FullName }` で全件
 - 既存 14 本は 2026-11-23 に統一した（`harvest_rpc.py` だけは個別に挿入）
 - 新しく足すツールも同じ形にする
+
+## 11. 資格情報が履歴に入った件（2026-11-23）
+
+`redact` の単体テストに、実在するクラウドPCの SSH パスワードをそのまま書いていた。
+値は `cloud_pc.v1.CloudPCService/Get` の応答から取ったもので、テストの材料に実資格情報を
+使ってはいけない。
+
+- 追跡ファイルからは即座に合成値へ置換
+- その後、5 コミットに遡って履歴を `git filter-branch --tree-filter` で書き換え
+- `refs/original` 削除、reflog expire、`git gc --prune=now` で旧 blob を破棄
+- 全 31 コミット・全ファイルを走査し、残存 0 件、旧コミットは到達不能
+- 書き換え前の全 ref は `tmp/pre-scrub2-backup.bundle` に退避（追跡外）
+
+**再発防止**: テストの固定値は必ず合成値にする。実サービスから取った値は、
+伏せ字を通した後でも、テストへコピーしない。
