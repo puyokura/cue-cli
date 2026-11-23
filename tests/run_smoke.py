@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Live smoke test for the cue CLI.
+
+Runs the built binary as a separate process against the real service and
+asserts on observed output. No mocks: every expectation is a fact the service
+actually returns.
+
+Usage: run_smoke.py [path-to-cue-binary]
+"""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    "crates", "cue-cli", "target", "debug",
+    "cue.exe" if os.name == "nt" else "cue",
+)
+
+results = []
+
+
+def run(args, expect_ok=True, env_extra=None):
+    env = dict(os.environ)
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.run(
+        [BIN] + args,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
+    out = proc.stdout.strip()
+    err = proc.stderr.strip()
+    return proc.returncode, out, err
+
+
+def check(name, cond, detail=""):
+    results.append((name, bool(cond), detail))
+    print(("PASS " if cond else "FAIL ") + name + (("  " + detail) if detail and not cond else ""))
+
+
+def main():
+    tmp = tempfile.mkdtemp(prefix="cue-smoke-")
+    env = {}
+    if os.name == "nt":
+        env["APPDATA"] = tmp
+    else:
+        env["XDG_CONFIG_HOME"] = tmp
+
+    # 1. region: public RPC, no auth
+    rc, out, err = run(["region"], env_extra=env)
+    check("region exits 0", rc == 0, err)
+    try:
+        region = json.loads(out)
+        check("region has iso", "iso" in region, out[:200])
+        check("region iso is 2 letters", len(region.get("iso", "")) == 2, str(region.get("iso")))
+        check("region has dial code", region.get("code", "").startswith("+"), str(region.get("code")))
+    except json.JSONDecodeError:
+        check("region output is JSON", False, out[:200])
+
+    # 2. settings: public RPC, no auth
+    rc, out, err = run(["settings"], env_extra=env)
+    check("settings exits 0", rc == 0, err)
+    try:
+        settings = json.loads(out)
+        check("settings non-empty", len(settings) > 0, out[:200])
+    except json.JSONDecodeError:
+        check("settings output is JSON", False, out[:200])
+
+    # 3. generic rpc passthrough on a public method
+    rc, out, err = run(["rpc", "user.v1.UserPublicService/GetExchangeInfo"], env_extra=env)
+    check("rpc passthrough exits 0", rc == 0, err)
+    try:
+        exch = json.loads(out)
+        check("exchange has subscriptions", isinstance(exch.get("subscriptions"), list), out[:200])
+    except json.JSONDecodeError:
+        check("rpc output is JSON", False, out[:200])
+
+    # 4. proto codec: empty body must decode to non-empty bytes
+    rc, out, err = run(["raw", "user.v1.UserPublicService/CheckRegion"], env_extra=env)
+    check("raw proto exits 0", rc == 0, err)
+    check("raw proto returns bytes", "bytes as hex:" in out and len(out.splitlines()) > 1, out[:200])
+
+    # 5. auth-required call without a token fails cleanly and names the reason
+    rc, out, err = run(["whoami"], env_extra=env)
+    check("whoami without token exits non-zero", rc != 0, out)
+    check("whoami reports missing token", "no token" in err, err)
+
+    # 6. bogus token must not be persisted
+    rc, out, err = run(["login", "--token", "bogus-smoke"], env_extra=env)
+    check("login with bogus token exits non-zero", rc != 0, out)
+    check("login reports rejection", "rejected" in err or "401" in err, err)
+    tok = os.path.join(tmp, "cue-cli", "token")
+    check("bogus token not stored", not os.path.exists(tok), tok)
+
+    # 7. unknown command exits 2 with usage
+    rc, out, err = run(["nonsense"], env_extra=env)
+    check("unknown command exits 2", rc == 2, f"rc={rc}")
+
+    # 8. methods reports the static inventory count
+    rc, out, err = run(["methods"], env_extra=env)
+    check("methods exits 0", rc == 0, err)
+    try:
+        meta = json.loads(out)
+        check("inventory has 252 methods", meta.get("methods") == 252, str(meta))
+    except json.JSONDecodeError:
+        check("methods output is JSON", False, out[:200])
+
+    passed = sum(1 for _, ok, _ in results if ok)
+    total = len(results)
+    print(f"\n{passed}/{total} checks passed")
+    return 0 if passed == total else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,14 @@
+# 作業用の中間生成物は含めない（再生成は docs/probe-log.md の手順で行う）
+work/
+tmp/
+
+# このホスト固有の運用指示（配布物には含めない）
+AGENTS.md
+
+# Rust ビルド成果物
+target/
+crates/*/target/
+
+# 追加の派生データ
+*.xapk
+*.apk

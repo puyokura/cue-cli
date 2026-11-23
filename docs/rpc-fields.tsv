@@ -1,0 +1,115 @@
+rpc	status	field_path	rule	message
+/agents.v1.AgentGroupsService/BatchAddAgentGroupMember	400	group_id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/DeleteAgentGroup	400	id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/GetAgentGroup	400	id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/ListAgentGroups	400	limit#2	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 1000
+/agents.v1.AgentGroupsService/RemoveAgentFromAgentGroup	400	group_id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/RemoveAgentFromAgentGroup	400	agent_id#2	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/SetAgentGroupPinned	400	id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentGroupsService/UpdateAgentGroup	400	id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentsService/CreateAgentV2	400		agents.create_v2.name_or_url	name is required when url is empty
+/agents.v1.AgentsService/CreateAgentV2	400	assets#5	required	value is required
+/agents.v1.AgentsService/GetAgentBySessionUID	400	session_uid#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentsService/GetAgentSubtaskActivity	400	agent_id#1	string.min_len	must be at least 1 characters
+/agents.v1.AgentsService/ListAgentConversations	400	limit#1	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 1000
+/agents.v1.AgentsService/ListAgentsV2	400	agents_limit#2	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 1000
+/agents.v1.AgentsService/ListAgentsV2	400	channels_limit#4	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 1000
+/agents.v1.ShopService/CompleteShopConnection	400	state#2	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/FactoryReset	400	pc_id#1	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/GetInstanceStatus	400	pc_id#1	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/GetMetricsTimeSeries	400	pc_id#1	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/GetMetricsTimeSeries	400	time_range#2	enum.not_in	must not be in list [0]
+/cloud_pc.v1.CloudPCService/List	400	limit#2	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 100
+/cloud_pc.v1.CloudPCService/ResetSSHPassword	400	pc_id#1	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/UpdateName	400	pc_id#1	string.min_len	must be at least 1 characters
+/cloud_pc.v1.CloudPCService/UpdateName	400	name#2	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/CancelRemoteControlRequest	400	request_uid#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/CreateRemoteControlRequest	400	target_device_id#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/CreateRemoteControlRequest	400	requested_scope#2	enum.const	must equal 1
+/device_authorization.v1.DeviceAuthorizationService/GetRemoteControlAuthorizationStatus	400	target_device_id#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/GetRemoteControlRequest	400	request_uid#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/KeepScreenLive	400	target_device_id#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/KeepScreenLive	400	viewer_id#3	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/RedeemRemoteControlCode	400	request_uid#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/RedeemRemoteControlCode	400	code#2	string.pattern	does not match regex pattern `^[0-9]{6}$`
+/device_authorization.v1.DeviceAuthorizationService/RevokeRemoteControlGrant	400	grant_uid#1	string.min_len	must be at least 1 characters
+/device_authorization.v1.DeviceAuthorizationService/StopScreenLive	400	target_device_id#1	string.min_len	must be at least 1 characters
+/dream.v1.DreamService/GetUserDream	400		get_user_dream_agent_ref_required	agent_id or session_id is required
+/dream.v1.DreamService/UpdateEdits	400		update_edits_agent_ref_required	agent_id or session_id is required
+/notifier.v1.NotificationService/GetNotificationListV2	400	limit#2	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 20
+/notifier.v1.NotifierService/Logout	400	device_id#1	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	user_id#1	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	device_id#2	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	device_type#3	string.in	must be in list [BROWSER, ANDROID, IOS]
+/notifier.v1.NotifierService/RegisterDevice	400	os_type#4	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	client_type#5	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	client_version#6	string.min_len	must be at least 1 characters
+/notifier.v1.NotifierService/RegisterDevice	400	client_locale#7	string.min_len	must be at least 1 characters
+/place.v1.PlaceService/AutocompleteAddress	400	input#1	string.min_len	must be at least 1 characters
+/place.v1.PlaceService/AutocompleteAddress	400	input#1	string.pattern	does not match regex pattern `\S`
+/place.v1.PlaceService/AutocompleteAddress	400	session_token#2	string.uuid_empty	value is empty, which is not a valid UUID
+/place.v1.PlaceService/GetAddressDetail	400	place_id#1	string.min_len	must be at least 1 characters
+/place.v1.PlaceService/GetAddressDetail	400	place_id#1	string.pattern	does not match regex pattern `^[A-Za-z0-9_-]+$`
+/place.v1.PlaceService/GetAddressDetail	400	session_token#2	string.uuid_empty	value is empty, which is not a valid UUID
+/session.v1.SessionCollaborateService/CheckAlphaByEmail	400	email#1	string.email_empty	value is empty, which is not a valid email address
+/session.v1.SessionCollaborateService/ListMemberRequests	400	session_uid#1	string.min_len	must be at least 1 characters
+/session.v1.SessionCollaborateService/ListMemberRequests	400	limit#3	int32.gte_lte	must be greater than or equal to 1 and less than or equal to 200
+/session.v1.SessionPublicService/RefreshAssetURLs	400	urls#1	repeated.min_items	must contain at least 1 item(s)
+/session.v1.SessionService/ListScheduleTaskSessionLogs	400	task_uid#1	string.min_len	must be at least 1 characters
+/session.v1.SessionService/ListSessionFilesByGroup	400	limit#2	int32.gt_lte	must be greater than 0 and less than or equal to 100
+/session.v1.SessionService/SearchSessionFiles	400	limit#3	int32.gt_lte	must be greater than 0 and less than or equal to 100
+/session.v1.SessionService/ShareSpaceToCommunity	400	space_uid#1	string.min_len	must be at least 1 characters
+/session.v1.SessionService/ShareSpaceToCommunity	400	session_uid#2	string.min_len	must be at least 1 characters
+/session.v1.SessionService/ShareSpaceToCommunity	400	title#3	string.min_len	must be at least 1 characters
+/session.v1.SessionService/SubmitCueMessageFeedback	400	session_uid#1	string.min_len	must be at least 1 characters
+/session.v1.SessionService/SubmitCueMessageFeedback	400	event_id#2	string.min_len	must be at least 1 characters
+/session.v1.SessionService/SubmitCueMessageFeedback	400	event_time#3	required	value is required
+/session.v1.SessionService/SubmitCueMessageFeedback	400	rating#4	enum.not_in	must not be in list [0]
+/session.v1.SessionService/UnshareSpaceFromCommunity	400	space_uid#1	string.min_len	must be at least 1 characters
+/session.v1.SessionService/UnshareSpaceFromCommunity	400	session_uid#2	string.min_len	must be at least 1 characters
+/skill.v1.SkillService/ImportSkillFromGitHub	400	github_url#1	string.min_len	must be at least 1 characters
+/skill.v1.SkillService/ImportSkillFromGitHub	400	github_url#1	string.pattern	does not match regex pattern `^https?://github\.com/.+`
+/skill.v1.SkillService/ListDeviceSkills	400	device_id#1	string.min_len	must be at least 1 characters
+/skill.v1.SkillService/ToggleSkill	400	skill_id#1	string.min_len	must be at least 1 characters
+/skill.v1.SkillService/UploadSkill	400	content#1	bytes.min_len	must be at least 1 bytes
+/telecom.v1.TelecomService/ConfirmPhoneIdentityVerification	400	draft_id#1	string.min_len	must be at least 1 characters
+/telecom.v1.TelecomService/DiscardPhoneIdentityVerificationDraft	400	draft_id#1	string.min_len	must be at least 1 characters
+/telecom.v1.TelecomService/EnsureAgentEmail	400	session_uid#1	string.min_len	must be at least 1 characters
+/telecom.v1.TelecomService/GetPhoneIdentityVerificationDraft	400	draft_id#1	string.min_len	must be at least 1 characters
+/telecom.v1.TelecomService/GetPhoneIdentityVerificationStatus	400	country_code#1	string.len	must be 2 characters
+/telecom.v1.TelecomService/GetPhoneIdentityVerificationStatus	400	country_code#1	string.pattern	does not match regex pattern `^[A-Za-z]{2}$`
+/telecom.v1.TelecomService/StartPhoneIdentityVerification	400	country_code#1	string.len	must be 2 characters
+/telecom.v1.TelecomService/StartPhoneIdentityVerification	400	country_code#1	string.pattern	does not match regex pattern `^[A-Za-z]{2}$`
+/telecom.v1.TelecomService/StartPhoneIdentityVerification	400	return_url#2	string.min_len	must be at least 1 characters
+/user.v1.UserAuthPublicService/GenerateTokenForNewSession	400	token#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthPublicService/LoginCueByPhoneCode	400	verification_id#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthPublicService/LoginCueByPhoneCode	400	code#2	string.min_len	must be at least 4 characters
+/user.v1.UserAuthPublicService/LoginCueByPhonePassword	400	phone_number#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthPublicService/LoginCueByPhonePassword	400	password#2	string.min_len	must be at least 1 characters
+/user.v1.UserAuthPublicService/ResetCuePhonePassword	400	verification_id#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthPublicService/ResetCuePhonePassword	400	code#2	string.min_len	must be at least 4 characters
+/user.v1.UserAuthPublicService/ResetCuePhonePassword	400	password#3	string.min_bytes	must be at least 12 bytes
+/user.v1.UserAuthPublicService/SendCuePhoneCode	400	phone_number#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthPublicService/SendCuePhoneCode	400	purpose#2	enum.not_in	must not be in list [0]
+/user.v1.UserAuthPublicService/SwitchUser	400	user_id#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/AddCueTrustedPhoneNumber	400	verification_id#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/AddCueTrustedPhoneNumber	400	code#2	string.min_len	must be at least 4 characters
+/user.v1.UserAuthService/BindCuePhone	400	verification_id#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/BindCuePhone	400	code#2	string.min_len	must be at least 4 characters
+/user.v1.UserAuthService/ChangeCuePhone	400	change_token#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/ChangeCuePhone	400	verification_id#2	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/ChangeCuePhone	400	code#3	string.min_len	must be at least 4 characters
+/user.v1.UserAuthService/SendCuePhoneBindingCode	400	phone_number#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/SendCuePhoneChangeNewCode	400	change_token#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/SendCuePhoneChangeNewCode	400	phone_number#2	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/SendCueTrustedPhoneCode	400	phone_number#1	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/StartCuePhoneChange	400	verification_id#1	string.uuid_empty	value is empty, which is not a valid UUID
+/user.v1.UserAuthService/StartCuePhoneChange	400	code#2	string.min_len	must be at least 4 characters
+/user.v1.UserAuthService/UpdateEmail	400	new_email#1	string.email_empty	value is empty, which is not a valid email address
+/user.v1.UserAuthService/UpdateEmail	400	verify_code#2	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/UpdateEmailWithPassword	400	password#2	string.min_len	must be at least 12 characters
+/user.v1.UserAuthService/UpdateEmailWithPassword	400	verify_code#3	string.min_len	must be at least 1 characters
+/user.v1.UserAuthService/VerifyEmail	400	verify_code#1	string.min_len	must be at least 1 characters
+/user.v1.UserService/PickEmailUsers	400	email#1	string.email_empty	value is empty, which is not a valid email address
+/user.v1.UserService/RedeemAgentsAppInvitationCode	400	code#1	string.min_len	must be at least 1 characters
+/user_apiproxy.v1.UserApiProxyService/AudioTranscription	400		audio_transcription.single_source	exactly one of audio_content or file_url is required
