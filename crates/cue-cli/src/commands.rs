@@ -710,6 +710,8 @@ pub fn coverage() -> Result<String, String> {
         ("telecom countries", "/telecom.v1.TelecomService/ListSupportedCountries", json!({})),
         ("call rates", "/telecom.v1.TelecomService/GetCallRates", json!({})),
         ("free phone", "/telecom.v1.TelecomService/GetFreePhoneSettings", json!({})),
+        ("agents membership", "/user.v1.SubscriptionService/GetAgentsMembership", json!({})),
+        ("agents credits", "/user.v1.SubscriptionService/GetAgentsAvailableCredits", json!({})),
         ("email namespace", "/telecom.v1.TelecomService/GetAgentEmailNamespace", json!({})),
         ("cloud pc regions", "/cloud_pc.v1.CloudPCService/ListAvailableRegions", json!({})),
         ("webdev projects", "/webdev.v1.WebDevService/ListWebDevProjects", json!({"limit":10})),
@@ -1021,5 +1023,6 @@ pub fn telecom() -> Result<String, String> {
     }
     Ok(pretty(&Value::Object(out)))
 }
+
 
 

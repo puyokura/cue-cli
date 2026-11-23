@@ -159,7 +159,7 @@ def main():
         failed = [c["check"] for c in cov["checks"] if not c.get("ok")]
         check("coverage survey runs", "PASS" if rc == 0 else "FAIL", err[:120])
         check("coverage has no failed probes", "PASS" if not failed else "FAIL", str(failed))
-        check("coverage covers >= 26 surfaces", "PASS" if cov["total"] >= 23 else "FAIL",
+        check("coverage covers >= 28 surfaces", "PASS" if cov["total"] >= 23 else "FAIL",
               str(cov["total"]))
     else:
         check("coverage survey runs", "FAIL", (err or out)[:160])
@@ -185,6 +185,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
