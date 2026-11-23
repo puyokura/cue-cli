@@ -2,6 +2,7 @@
 //! and nothing here invents values the service did not return.
 
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::fs;
 
 use crate::client;
@@ -155,6 +156,114 @@ pub fn methods() -> Result<String, String> {
         .map_err(|e| format!("read {}: {e}", path.display()))?;
     let count = text.lines().filter(|l| !l.trim().is_empty()).count();
     Ok(json!({ "inventory": path.display().to_string(), "methods": count }).to_string())
+}
+
+/// Namespace-level Socket.IO observation. Prints one line per frame; the
+/// bearer token is never echoed.
+pub fn watch(
+    seconds: Option<&String>,
+    frames: Option<&String>,
+    locale: Option<&String>,
+) -> Result<String, String> {
+    let secs: u64 = match seconds {
+        Some(s) => s.parse().map_err(|_| "--seconds must be a number")?,
+        None => 20,
+    };
+    let max_frames: usize = match frames {
+        Some(s) => s.parse().map_err(|_| "--frames must be a number")?,
+        None => 40,
+    };
+    let token = client::stored_token();
+    let locale_value = locale.cloned().unwrap_or_else(|| "ja-JP".to_string());
+
+    let ws_base = match std::env::var("CUE_WS_URL") {
+        Ok(v) if !v.trim().is_empty() => v.trim_end_matches('/').to_string(),
+        _ => "wss://api.manus.im".to_string(),
+    };
+
+    let query = vec![
+        ("locale".to_string(), locale_value),
+        ("tz".to_string(), "Asia/Tokyo".to_string()),
+        ("clientType".to_string(), "CUE".to_string()),
+        (
+            "clientVersion".to_string(),
+            "1.2.0".to_string(),
+        ),
+        ("x-product-name".to_string(), "cue".to_string()),
+    ];
+
+    let mut out: Vec<String> = Vec::new();
+    crate::socket::run(&ws_base, token.as_deref(), &query, secs, max_frames, &mut |line| {
+        out.push(line.to_string());
+    })?;
+    Ok(out.join("\n"))
+}
+
+/// Join a session and post one prompt, streaming the server's replies.
+///
+/// Refuses to send without a stored token: the socket accepts an unauthenticated
+/// handshake but rejects the namespace, so a send would produce no result.
+pub fn send(session_id: Option<&String>, text: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+    let session_id = session_id.ok_or("send requires <session_id>")?;
+    let text = text.ok_or("send requires --text <prompt>")?;
+    if text.trim().is_empty() {
+        return Err("--text is empty".into());
+    }
+    let token = client::stored_token()
+        .ok_or_else(|| "no token; run `cue login --token <value>` first".to_string())?;
+
+    let seconds: u64 = match flags.get("seconds") {
+        Some(s) => s.parse().map_err(|_| "--seconds must be a number")?,
+        None => 60,
+    };
+    let max_frames: usize = match flags.get("frames") {
+        Some(s) => s.parse().map_err(|_| "--frames must be a number")?,
+        None => 400,
+    };
+    let task_mode = flags.get("task-mode").cloned().unwrap_or_else(|| "standard".into());
+    let delivery_mode = flags.get("delivery-mode").cloned().unwrap_or_else(|| "interrupt".into());
+    let locale = flags.get("locale").cloned().unwrap_or_else(|| "ja-JP".into());
+    let verbose = flags.contains_key("verbose");
+
+    let ws_base = match std::env::var("CUE_WS_URL") {
+        Ok(v) if !v.trim().is_empty() => v.trim_end_matches('/').to_string(),
+        _ => "wss://api.manus.im".to_string(),
+    };
+
+    // The CLI does not know the account's region; the caller may supply it.
+    let iso = flags.get("country-iso").map(|s| s.as_str());
+
+    let plan = crate::session::Plan {
+        base_ws: &ws_base,
+        token: Some(token.as_str()),
+        locale: &locale,
+        join_session: Some(session_id.as_str()),
+        prompt: Some((session_id.as_str(), text.as_str())),
+        task_mode: &task_mode,
+        delivery_mode: &delivery_mode,
+        country_iso: iso,
+        seconds,
+        max_frames,
+        verbose,
+    };
+
+    let mut out: Vec<String> = Vec::new();
+    let outcome = crate::session::run(plan, &mut |line| out.push(line.to_string()))?;
+
+    out.push(String::new());
+    out.push(format!(
+        "summary: engine_open={} namespace_ok={} joined={} prompt_sent={} events={} chat_frames={}",
+        outcome.engine_open,
+        outcome.namespace_ok,
+        outcome.joined,
+        outcome.prompt_sent,
+        outcome.events,
+        outcome.chat_frames
+    ));
+    if let Some(err) = outcome.namespace_error {
+        out.push(format!("namespace_error: {err}"));
+    }
+    Ok(out.join("\n"))
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {

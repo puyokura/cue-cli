@@ -109,6 +109,20 @@ def main():
     except json.JSONDecodeError:
         check("methods output is JSON", False, out[:200])
 
+    # 9. watch performs a real Socket.IO handshake and reports the namespace
+    #    rejection, which is what an unauthenticated socket is supposed to see.
+    rc, out, err = run(["watch", "--seconds", "6", "--frames", "6"], env_extra=env)
+    check("watch exits 0", rc == 0, err)
+    check("watch got a 101 handshake", "handshake 101" in out, out[:200])
+    check("watch saw the engine.io open packet", "engine.io open" in out, out[:200])
+    check("watch saw the namespace rejection", "namespace rejected" in out, out[:200])
+    check("watch never echoed a token", '{"token":}' in out or "token" not in out, out[:200])
+
+    # 10. send refuses to post without a token instead of silently failing
+    rc, out, err = run(["send", "sess-x", "--text", "hello"], env_extra=env)
+    check("send without token exits non-zero", rc != 0, out)
+    check("send explains the missing token", "no token" in err, err)
+
     passed = sum(1 for _, ok, _ in results if ok)
     total = len(results)
     print(f"\n{passed}/{total} checks passed")

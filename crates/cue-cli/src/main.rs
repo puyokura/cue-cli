@@ -15,8 +15,11 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+mod chat;
 mod client;
 mod commands;
+mod session;
+mod socket;
 
 fn usage() -> ! {
     eprintln!(
@@ -36,6 +39,8 @@ Commands:
   agents [--limit n]                  agents.v1.AgentsService/ListAgentsV2
   rpc <service.Method> [--json <b>]   call any Connect RPC by path
   raw <service.Method> [--bytes <hex>] call any Connect RPC over proto
+  watch [--seconds n] [--frames n]    Socket.IO session: observe frames
+  send <session_id> --text <prompt>   join a session and post a prompt
   methods                             print the static RPC inventory path
 ",
         version = env!("CARGO_PKG_VERSION")
@@ -81,6 +86,8 @@ fn main() {
         "agents" => commands::agents(flags.get("limit")),
         "rpc" => commands::rpc(positional.first(), flags.get("json")),
         "raw" => commands::raw(positional.first(), flags.get("bytes")),
+        "watch" => commands::watch(flags.get("seconds"), flags.get("frames"), flags.get("locale")),
+        "send" => commands::send(positional.first(), flags.get("text"), &flags),
         "methods" => commands::methods(),
         "--help" | "-h" | "help" => {
             usage();

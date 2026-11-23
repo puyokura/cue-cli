@@ -141,11 +141,76 @@ S: 44{"message":"Invalid Token"}
 ```
 
 接続オプション（Web 実装で確認）: `withCredentials:true, reconnection:false, auth:{token}, query:{locale,tz,clientType,clientVersion,"x-product-name"}, transports:["websocket"]`。
-認証後のイベント名は未確定。
+
+### 6.1 フレーム形式
+
+Engine.IO プレフィックス `0` open / `1` close / `2` ping / `3` pong / `4` message、
+Socket.IO プレフィックス `0` connect / `1` disconnect / `2` event / `3` ack / `4` error。
+
+イベントは `42["<event>", <payload>]`。**キーは snake_case**。
+Web クライアントは送信時に `convertObjectNames("server", …)` で camelCase→snake_case、
+受信時に `convertObjectNames("client", …)` で snake_case→camelCase に変換する。
+つまりワイヤ上は常に snake_case。
+
+### 6.2 イベント（Web バンドルから抽出した全数）
+
+送信（19 種）: `user_message`, `join_session`, `leave_session`, `sync_sessions`,
+`change_task_mode`, `message_queue_action`, `side_chat_request`, `follow_up_end`,
+`addon_widget_notify`, `watch_session_pull_requests`, `check_git_sync_status`,
+`create_git_repo`, `kill_cascade_job`, `kill_cascade_job_group`,
+`set_workspace_working_directory`, `switch_deploy_version`,
+`confirm_connector_re_oauth`, `resume_map_reduce`
+
+受信（応答の対応表）:
+
+| 送信 type | 待つ受信イベント |
+|---|---|
+| `user_message` | `chat`（`type:"chat"`, `sender:"user"`, 同 `id`） |
+| `join_session` | `eventsNotifyEventsAfter` |
+| `change_task_mode` | `taskModeChanged` |
+| `change_queue` | `queueStatusChange` |
+| `sync_sessions` | `sessions_synced` |
+| `stop_session` | `userStop` |
+| `start_sandbox` | `sandboxUpdate` / `sandboxLimitReached` |
+| `turn_preparation_action` | `turnPreparationStatus` |
+| `retry_upload` | `userRetryUploadResult` |
+| `switch_deploy_version` | `deploySwitchVersionResult` |
+
+受信フレームの外形は `{"type":"event","session_id":...,"event":{...}}`
+または `{"type":..., "session_id":..., ...}`。エージェントの失敗は `type:"agent_error"` +
+`code`/`message`。
+
+### 6.3 プロンプト送信の実ペイロード（Web 実装から）
+
+```json
+{"type":"user_message","id":"<22桁>","session_id":"<sid>","timestamp":1732…,
+ "message_type":"text","task_mode":"standard",
+ "content":"<本文>","contents":[{"type":"text","value":"<本文>"}],
+ "attachments":[],"delivery_mode":"interrupt","country_iso_code":"JP",
+ "ext_data":{"mode":"…","maxEffort":"…"}}
+```
+
+`task_mode` は `standard` / `max` / `lite` / `flex`（アカウント種別で変わる）。
+`delivery_mode` は `interrupt`（既定）ほか `queue`。
+
+セッション購読:
+
+```json
+{"type":"join_session","session_id":"<sid>","last_message_id":"new_session",
+ "version":2,"session_view":{"version":…,"from":…}}
+```
+
+`sender` の値は `user` / `agent`。`chat` イベントに `content` / `delta` が入る。
 
 ## 7. 未確定事項
 
-- Socket.IO 認証後のイベント名と購読手順
-- メッセージ送信が REST（`/api/chat/*`）か socket か、両方か
-- `x-client-dcr`（デバイスチェック）の生成手順と、メールログインでの必須性
+- 認証後の `join_session` 応答（`eventsNotifyEventsAfter`）の内部構造
+- メッセージ送信が socket のみか、REST の併用が必要か
+- `x-client-dcr` の Turnstile 連携部分（`fgRequestId` に何が入るか）
 - `telecom.v1`（電話番号・SMS・通話）の実挙動（要認証）
+
+## 8. 実装状況
+
+`crates/cue-cli` は上記のうち、公開 RPC・proto コーデック・Bearer 認証・
+Socket.IO ハンドシェイク・`join_session` / `user_message` の送出までを実装済み。
+認証後の応答処理は実トークンが必要なため未検証（`docs/auth-status.md`）。
