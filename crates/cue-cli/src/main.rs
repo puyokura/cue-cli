@@ -87,7 +87,8 @@ LOW LEVEL
                                        call any Connect RPC with a JSON body
   raw <Service.Method> [--bytes <hex>] [--confirm]
                                        call any Connect RPC over the proto codec
-  discover <service> <method>...       probe whether Connect routes exist
+  discover <service> <method>... [--confirm]
+                                       probe whether Connect routes exist
   coverage                             read-only survey of the authenticated surface
   methods                              print the static RPC inventory path
   version                              print the version
@@ -546,3 +547,4 @@ pub fn write_state(path: &Path, contents: &str) -> Result<(), String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
+
