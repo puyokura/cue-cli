@@ -341,12 +341,17 @@ pub fn status() -> Value {
         _ => json!({"ok": false, "error": "no token"}),
     };
 
-    json!({
+    let mut out = json!({
       "state_path": state_path,
       "signed_in": signed_in,
       "base": base,
       "identity_check": identity_check,
-    })
+    });
+    if let Some(err) = state_error {
+        // A "-" path with no explanation reads like a bug; name the reason.
+        out["state_error"] = json!(err);
+    }
+    out
 }
 
 #[cfg(test)]

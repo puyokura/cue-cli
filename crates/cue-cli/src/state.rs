@@ -34,7 +34,18 @@ impl StatePaths {
         let candidate = first_env(&["CUE_STATE", "CUE_MCP_STATE"]);
         let raw = match candidate {
             Some(value) => PathBuf::from(value),
-            None => os_default_dir()?,
+            // A set-but-empty variable is a mistake, not a request for the OS
+            // default: silently using a directory the caller did not name looks
+            // like it worked. Only the variable that would win is checked, so a
+            // lower-priority empty value cannot block a higher one.
+            None => match empty_env_var() {
+                Some(name) => {
+                    return Err(format!(
+                        "{name} is set but empty; give it a path or unset it"
+                    ))
+                }
+                None => os_default_dir()?,
+            },
         };
         Ok(Self::from_path(raw))
     }

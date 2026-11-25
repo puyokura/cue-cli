@@ -109,9 +109,10 @@ fn tools() -> Value {
             "seconds": { "type": "integer" }
         }), vec!["session_id"]),
         tool("cue_mfa_status", "Read two-step verification state.", json!({}), vec![]),
-        tool("cue_discover", "Probe whether Connect routes exist (404/401 oracle).", json!({
+        tool("cue_discover", "Probe whether Connect routes exist (404/401 oracle). Needs \"confirm\": true.", json!({
             "service": { "type": "string" },
-            "methods": { "type": "array", "items": { "type": "string" } }
+            "methods": { "type": "array", "items": { "type": "string" } },
+            "confirm": { "type": "boolean", "description": "required: sends POSTs for the named methods" }
         }), vec!["service"]),
     ])
 }
@@ -234,6 +235,7 @@ fn call_tool(name: &str, args: &Value) -> Result<String, String> {
             crate::commands::join(Some(&sid.to_string()), &flags)
         }
         "cue_discover" => {
+            require_confirm(args, "cue_discover", "POSTs caller-supplied method names")?;
             let service = arg_str(args, "service").ok_or("service is required")?;
             let methods: Vec<String> = args
                 .get("methods")

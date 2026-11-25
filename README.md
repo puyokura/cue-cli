@@ -74,8 +74,9 @@ cue_sessions  cue_session  cue_agents  cue_rpc  cue_send  cue_new
 cue_join  cue_telecom  cue_sandbox  cue_mfa_status  cue_discover
 ```
 
-`cue_rpc` は CLI と同じ `--confirm` 規則に従う。状態変更メソッドは
-`"confirm": true` を渡さないと実行されない（CLI の `--confirm` と同じ判定）。
+`cue_rpc` / `cue_new` / `cue_send` / `cue_discover` は CLI と同じ `--confirm` 規則に従う。
+状態変更メソッド（および `cue_new`・`cue_send`・`cue_discover`）は
+`"confirm": true`（真偽値）を渡さないと実行されない。文字列 `"false"` は拒否される。
 
 ```
 {
@@ -118,8 +119,8 @@ CI の Linux ジョブで初めて実測される）。トークンの値は標�
 
 ```
 cargo build --release          # ルートからビルドできる（ワークスペース）
-cargo test                     # 56/56 PASS（オフライン）
-python tests/run_smoke.py      # 88/88 PASS（実サービス、認証不要の範囲）
+cargo test                     # 58/58 PASS（オフライン）
+python tests/run_smoke.py      # 93/93 PASS（実サービス、認証不要の範囲）
 python tests/run_live.py       # 17 PASS / 2 SKIP / 0 FAIL（要ログイン、読み取りのみ）
 python tests/mcp_probe.py      # 遅いツールが読み取りループを塞がないこと
 python tests/check_docs.py     # 文書に書いた件数がファイルと一致すること
@@ -153,6 +154,8 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+
 
 
 

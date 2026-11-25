@@ -203,6 +203,22 @@ const READ_PREFIXES: &[&str] = &[
 /// exception, and it takes no arguments that could carry a mutation.
 const READ_EXCEPTIONS: &[&str] = &["activeimuser"];
 
+/// Methods whose name starts with a read prefix but hands back a credential or
+/// a write-capable URL.
+///
+/// A name-based gate cannot see this, so the list is spelled out. Minting an
+/// upload URL or a help-centre token is a side effect even though the verb is
+/// `Get`.
+const CREDENTIAL_MINTERS: &[&str] = &[
+    "getsessionfileuploadurl",
+    "gethelpcentertoken",
+    "geteditspacesitecode",
+    "getgithubappinstallations",
+    "getappinstallurl",
+    "getappauthurl",
+    "getbackupsuggestion",
+];
+
 /// Whether this RPC method changes remote state.
 pub fn state_changing_method(name: &str) -> bool {
     if !is_well_formed_method(name) {
@@ -211,6 +227,10 @@ pub fn state_changing_method(name: &str) -> bool {
         return true;
     }
     let tail = name.rsplit('/').next().unwrap_or(name).to_ascii_lowercase();
+    if CREDENTIAL_MINTERS.contains(&tail.as_str()) {
+        // `Get…` that hands back a credential is not a read.
+        return true;
+    }
     if READ_PREFIXES.iter().any(|read| tail.starts_with(read)) {
         return false;
     }
@@ -341,6 +361,19 @@ mod tests {
             let a = args_of(&[name]);
             assert!(is_destructive_command("rpc", &a), "{name} should be gated");
         }
+    }
+
+    #[test]
+    fn credential_minters_are_gated_despite_the_read_prefix() {
+        for name in [
+            "session.v1.SessionService/GetSessionFileUploadUrl",
+            "user.v1.UserService/GetHelpCenterToken",
+            "space.v1.SpaceService/GetEditSpaceSiteCode",
+        ] {
+            assert!(state_changing_method(name), "{name} mints a credential");
+        }
+        // A plain read with a similar name stays ungated.
+        assert!(!state_changing_method("user.v1.UserService/UserInfo"));
     }
 
     #[test]

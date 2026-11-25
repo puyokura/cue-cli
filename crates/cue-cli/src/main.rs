@@ -107,9 +107,13 @@ JSON INPUT
 
 DESTRUCTIVE OPERATIONS
   Every command that can change remote state requires --confirm: webdev-deploy,
-  new, send, `mfa` (enable/disable/totp/passkey/codes), `phone reset`, and any
-  `rpc`/`raw` whose method is not one of the read prefixes
-  (Get/List/Search/Page/Check/Query/View/Read/User).
+  new, send, discover, `mfa` (enable/disable/totp/passkey/codes),
+  `phone reset`, and any `rpc`/`raw` whose method is not one of the read prefixes
+  (Get/List/Search/Page/Check/Query/View/Read/User) or is a credential minter.
+
+  --confirm takes no value and must be the last argument. `--confirm false`,
+  an empty value, or an unset-variable expansion are refused: only the bare
+  switch counts as consent.
 
   The decision is made on the method name, and the default is `state-changing`:
   a method the CLI has never seen is gated until its name says it reads. A
@@ -210,13 +214,6 @@ fn known_flags(command: &str) -> &'static [&'static str] {
 }
 
 fn main() {
-    // A set-but-empty state variable is reported rather than silently ignored;
-    // see state::empty_env_var.
-    if let Some(name) = state::empty_env_var() {
-        eprintln!("error: {name} is set but empty; give it a path or unset it");
-        std::process::exit(2);
-    }
-
     let raw: Vec<String> = env::args().skip(1).collect();
     if raw.is_empty() {
         usage();
@@ -261,9 +258,10 @@ fn main() {
     let rest: Vec<String> = prefix.into_iter().chain(remaining[1..].to_vec()).collect();
     let args = cli::Args::parse(&rest);
 
-    // `--state` redirects the state path before anything reads it. An empty value
-    // would fall through to the OS default, which looks like it worked while
-    // reading a directory the caller did not name.
+    // `--state` redirects the state path before anything reads it, and it wins
+    // over both environment spellings. An empty value would fall through to the
+    // OS default, which looks like it worked while reading a directory the
+    // caller did not name — so it is rejected here.
     if let Some(path) = args.flag("state") {
         if path.trim().is_empty() {
             eprintln!("error: --state needs a path");
@@ -271,6 +269,9 @@ fn main() {
         }
         // Safety: this runs before any other thread exists.
         env::set_var("CUE_STATE", path);
+        // The flag wins, so a lower-priority variable that happens to be empty
+        // must not block it.
+        env::remove_var("CUE_MCP_STATE");
     }
 
     if let Err(err) = body::reject_unknown_flags(
@@ -307,19 +308,19 @@ fn main() {
         eprintln!("error: {err}");
         std::process::exit(2);
     }
-    // `--confirm` is a switch, and consent has to be unambiguous.
-    //   --confirm=false      parsed as a flag with the value "false"
-    //   --confirm false      a switch followed by a stray positional
-    // The value form is caught by `flag(..).is_none()`; the stray positional is
-    // caught by looking for an answer-shaped word, because a script that writes
-    // `--confirm "$ANSWER"` otherwise opens the gate on "false".
-    let confirmed = args.has("confirm")
-        && args.flag("confirm").is_none()
-        && !args.positionals.iter().any(|p| is_a_denial(p));
-    if args.has("confirm") && !confirmed {
+    // Consent has to be unmistakable. Three shapes keep going wrong in scripts:
+    //   --confirm=false     a flag with a value
+    //   --confirm false     a switch plus a trailing word
+    //   --confirm ""        a switch plus an empty token (the unset-variable case)
+    // Only a bare `--confirm` that ends the command line counts, so nothing can
+    // follow it and be read as an answer. A trailing token is refused whatever
+    // it says, which makes the rule a shape rule rather than a word list:
+    // `cue rpc <method> --confirm`, not `cue rpc --confirm <method>`.
+    let confirmed = args.has("confirm") && args.flag("confirm").is_none();
+    if args.has("confirm") && !args.confirm_is_last() {
         eprintln!(
-            "error: --confirm takes no value; `--confirm false` is not confirmation. \
-             Pass the bare switch."
+            "error: --confirm must be the last argument; \
+             `--confirm false` and `--confirm \"\"` are not confirmation."
         );
         std::process::exit(2);
     }
@@ -483,17 +484,6 @@ fn status_output(args: &cli::Args) -> String {
         ));
         out
     }
-}
-
-/// Words that mean "no" when they land next to `--confirm`.
-///
-/// A script that writes `--confirm "$ANSWER"` must not open the gate on
-/// "false"; the answer has to be affirmative, or the switch has to be bare.
-fn is_a_denial(token: &str) -> bool {
-    matches!(
-        token.trim().to_ascii_lowercase().as_str(),
-        "false" | "0" | "no" | "off" | "n" | "none" | "null" | "deny" | "-h" | "-help"
-    )
 }
 
 fn doctor_output(args: &cli::Args) -> String {

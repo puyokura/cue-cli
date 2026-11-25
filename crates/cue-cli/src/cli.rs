@@ -29,6 +29,8 @@ pub struct Args {
     switches: Vec<String>,
     /// Names given as a bare `--flag` where a value was expected.
     valueless: Vec<String>,
+    /// Whether a bare `--confirm` was the last token on the command line.
+    confirm_was_last: bool,
 }
 
 impl Args {
@@ -37,6 +39,7 @@ impl Args {
         let mut flags: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut switches = Vec::new();
         let mut valueless: Vec<String> = Vec::new();
+        let mut confirm_was_last = false;
         let mut index = 0usize;
 
         while index < raw.len() {
@@ -63,6 +66,9 @@ impl Args {
                 // A value is taken unless the next token is itself a flag.
                 let has_value = index + 1 < raw.len() && !raw[index + 1].starts_with("--");
                 if is_boolean_switch(rest) {
+                    if rest == "confirm" && index + 1 == raw.len() {
+                        confirm_was_last = true;
+                    }
                     switches.push(rest.to_string());
                     index += 1;
                 } else if has_value {
@@ -94,6 +100,7 @@ impl Args {
             flags,
             switches,
             valueless,
+            confirm_was_last,
         }
     }
 
@@ -113,6 +120,15 @@ impl Args {
     /// be an error, a valueless `--live` is correct.
     pub fn without_value(&self) -> Vec<String> {
         self.valueless.clone()
+    }
+
+    /// Whether the bare `--confirm` was the final token.
+    ///
+    /// `--confirm` takes no value, so anything after it is either a mistake or
+    /// an answer the flag is not supposed to read. Requiring it to be last makes
+    /// both cases the same case: rejected, with the same message.
+    pub fn confirm_is_last(&self) -> bool {
+        self.confirm_was_last
     }
 
     pub fn has(&self, name: &str) -> bool {
@@ -185,6 +201,16 @@ mod tests {
         assert!(args.flag("limit").is_none());
         let ok = Args::parse(&["--live".into()]);
         assert!(ok.without_value().is_empty());
+    }
+
+    #[test]
+    fn confirm_last_only_when_nothing_follows() {
+        let last = Args::parse(&["--confirm".into()]);
+        assert!(last.confirm_is_last());
+        let followed = Args::parse(&["--confirm".into(), "false".into()]);
+        assert!(!followed.confirm_is_last());
+        let followed_by_flag = Args::parse(&["--confirm".into(), "--json".into(), "{}".into()]);
+        assert!(!followed_by_flag.confirm_is_last());
     }
 
     #[test]

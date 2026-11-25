@@ -308,6 +308,25 @@ def main():
     check("a malformed method path is gated", rc == 2 and "--confirm" in err, err[:120])
     rc, out, err = run(["--state=", "status"], env_extra=env)
     check("an empty --state is rejected", rc == 2, f"rc={rc}")
+    rc, out, err = run(["rpc", "x/DeleteNothing", "--confirm", ""], env_extra=env)
+    check("--confirm with an empty value is refused", rc == 2, f"rc={rc}")
+    rc, out, err = run(["rpc", "x/DeleteNothing", "--confirm", "yes"], env_extra=env)
+    check("--confirm with any trailing token is refused", rc == 2, f"rc={rc}")
+
+    # 17d. the MCP surface applies the same gate as the CLI
+    for tool, args_json in (
+        ("cue_discover", '{"service":"user.v1.UserAuthService","methods":["GetMfaStatus"]}'),
+        ("cue_new", '{"text":"x"}'),
+        ("cue_send", '{"session_id":"s","text":"x"}'),
+    ):
+        payload = ('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":'
+                   '{"name":"%s","arguments":%s}}' % (tool, args_json))
+        rc, out, err = run(["mcp"], env_extra=env, stdin_data=payload + "\n")
+        try:
+            reply = json.loads(out.splitlines()[-1])
+            check(f"MCP {tool} needs confirm", reply["result"]["isError"] is True, out[-160:])
+        except (json.JSONDecodeError, IndexError, KeyError):
+            check(f"MCP {tool} needs confirm", False, out[-160:])
 
     # 17c. --json-file and --set both reach the request builder
     body_file = os.path.join(tempfile.mkdtemp(prefix="cue-body-"), "b.json")
@@ -351,6 +370,7 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
