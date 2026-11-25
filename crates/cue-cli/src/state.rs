@@ -64,8 +64,7 @@ impl StatePaths {
 
     /// Create the directory and tighten its permissions.
     pub fn ensure(&self) -> Result<(), String> {
-        fs::create_dir_all(&self.dir)
-            .map_err(|e| format!("create {}: {e}", self.dir.display()))?;
+        fs::create_dir_all(&self.dir).map_err(|e| format!("create {}: {e}", self.dir.display()))?;
         crate::restrict_path(&self.dir)?;
         Ok(())
     }
@@ -150,4 +149,3 @@ mod tests {
         assert!(first_env(&["CUE_STATE_TEST_EMPTY"]).is_none());
     }
 }
-

@@ -131,9 +131,11 @@ def main():
     check("watch never echoed a token", '{"token":}' in out or "token" not in out, out[:200])
 
     # 10. send refuses to post without a token instead of silently failing
-    rc, out, err = run(["send", "sess-x", "--text", "hello"], env_extra=env)
+    rc, out, err = run(["send", "sess-x", "--text", "hello", "--confirm"], env_extra=env)
     check("send without token exits non-zero", rc != 0, out)
     check("send explains the missing token", "no token" in err, err)
+    rc, out, err = run(["send", "sess-x", "--text", "hello"], env_extra=env)
+    check("send is gated before it reaches the network", rc == 2 and "--confirm" in err, err[:120])
 
     # 11. the Cue product header must open the phone surface.
     #     With it, a malformed number reaches business validation (400230).
@@ -283,12 +285,25 @@ def main():
     except json.JSONDecodeError:
         check("status --json parses", False, out[:160])
 
+    # 17a. an explicit --help never runs the command
+    rc, out, err = run(["whoami", "--help"], env_extra=env)
+    check("--help prints usage", rc == 0 and "USAGE" in (out + err), (out + err)[:120])
+    check("--help does not reach the command", "no token" not in (out + err), (out + err)[:120])
+
     # 17b. a destructive command refuses to run without --confirm
     rc, out, err = run(["webdev-deploy", "--project", "x", "--version", "y"], env_extra=env)
     check("destructive command needs --confirm", rc == 2, f"rc={rc}")
     check("the confirm prompt names the command", "--confirm" in err, err[:160])
     rc, out, err = run(["webdev-deploy"], env_extra=env)
     check("missing arguments are reported first", "--project" in err, err[:160])
+    rc, out, err = run(["mfa", "disable", "--confirm=false"], env_extra=env)
+    check("--confirm=false is not confirmation", rc == 2, f"rc={rc}")
+    rc, out, err = run(["methods", "--list"], env_extra=env)
+    check("methods --list returns the inventory", rc == 0 and '"count"' in out, out[:120])
+    rc, out, err = run(["rpc", "user.v1.UserAuthService/DeletePasskey#/Get"], env_extra=env)
+    check("a malformed method path is gated", rc == 2 and "--confirm" in err, err[:120])
+    rc, out, err = run(["--state=", "status"], env_extra=env)
+    check("an empty --state is rejected", rc == 2, f"rc={rc}")
 
     # 17c. --json-file and --set both reach the request builder
     body_file = os.path.join(tempfile.mkdtemp(prefix="cue-body-"), "b.json")
@@ -332,6 +347,8 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
 
 
 

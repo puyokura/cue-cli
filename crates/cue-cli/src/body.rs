@@ -67,8 +67,7 @@ pub fn json_argument(args: &crate::cli::Args) -> Result<Option<Value>, String> {
         });
     }
     if let Some(path) = args.flag("json-file") {
-        let raw = std::fs::read_to_string(path)
-            .map_err(|e| format!("cannot read {path}: {e}"))?;
+        let raw = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
         return serde_json::from_str(&raw)
             .map(Some)
             .map_err(|e| format!("{path} does not contain valid JSON: {e}"));
@@ -109,7 +108,8 @@ pub fn reject_unknown_flags(
     // on the command, not on the name alone.
     for name in args.without_value() {
         let known_here = global.contains(&name.as_str()) || known.contains(&name.as_str());
-        if known_here && !booleans.contains(&name.as_str()) && !crate::cli::is_boolean_switch(&name) {
+        if known_here && !booleans.contains(&name.as_str()) && !crate::cli::is_boolean_switch(&name)
+        {
             return Err(format!(
                 "flag `--{name}` requires a value for `cue {command}`"
             ));
@@ -123,6 +123,7 @@ pub fn reject_unknown_flags(
 pub fn command_booleans(command: &str) -> &'static [&'static str] {
     match command {
         "doctor" | "status" => &["json"],
+        "methods" => &["list"],
         _ => &[],
     }
 }
@@ -138,16 +139,25 @@ pub fn is_destructive_command(command: &str, args: &crate::cli::Args) -> bool {
     match command {
         // Publishing to the internet is not undoable from here.
         "webdev-deploy" => true,
+        // Posting a prompt writes a session and spends credits. The prompt text
+        // is explicit, so this asks once rather than on every call.
+        "new" | "send" => true,
         "mfa" => {
             // Both directions change the account's login surface, so both ask.
             // `codes` rotates recovery codes, which invalidates printed copies.
             let sub = args.positional(0).unwrap_or("");
             matches!(
                 sub,
-                "disable" | "enable" | "passkey-delete" | "passkey-start"
-                    | "passkey-finish" | "totp-start" | "totp-finish" | "codes"
+                "disable"
+                    | "enable"
+                    | "passkey-delete"
+                    | "passkey-start"
+                    | "passkey-finish"
+                    | "totp-start"
+                    | "totp-finish"
+                    | "codes"
             )
-        },
+        }
         "phone" => {
             // `reset` sets a new account password. `start`/`verify`/`password`
             // are in the login flow, where confirmation is redundant.
@@ -159,12 +169,12 @@ pub fn is_destructive_command(command: &str, args: &crate::cli::Args) -> bool {
     }
 }
 
-/// Leaders whose RPC only reads.
+/// Leaders whose first word makes a method a read.
 ///
-/// Anything absent from this list is treated as a state change. That is the
-/// safe direction to be wrong in: a needless `--confirm` costs one keystroke, a
-/// missing one costs the account.
-const READ_LEADERS: &[&str] = &[
+/// Matched as a prefix against the lowercased tail, not as an exact word: the
+/// method name is CamelCase and the leader may be several words
+/// (`AutocompleteAddress` → `autocompleteaddress`).
+const READ_PREFIXES: &[&str] = &[
     "get",
     "list",
     "search",
@@ -173,39 +183,41 @@ const READ_LEADERS: &[&str] = &[
     "query",
     "view",
     "read",
-    // `UserInfo` splits into `User`, and it is the only method with that leader.
+    // `UserInfo` is `User…` and the service has no `User` mutation.
     "user",
+    // These two read a suggestion and hand back a consent URL; neither alters
+    // the account until the caller acts on the result.
     "autocompleteaddress",
-    // Authorize starts a consent flow and returns a URL; it does not alter the
-    // account until the user completes the consent.
     "oauth2authorize",
 ];
 
+/// Leaders that are reads despite not being in `READ_PREFIXES`.
+///
+/// Kept separate so the reasoning is visible per method rather than hidden in a
+/// prefix that happens to match.
+const READ_EXCEPTIONS: &[&str] = &["activeimuser"];
+
 /// Whether this RPC method changes remote state.
 pub fn state_changing_method(name: &str) -> bool {
-    let leader = leading_segment(name).to_ascii_lowercase();
-    !READ_LEADERS.iter().any(|read| leader == *read)
+    if !is_well_formed_method(name) {
+        // A malformed path (`…#/Get`, `…?/Get`) could route to one method while
+        // satisfying the check for another, so it is never treated as a read.
+        return true;
+    }
+    let tail = name.rsplit('/').next().unwrap_or(name).to_ascii_lowercase();
+    if READ_PREFIXES.iter().any(|read| tail.starts_with(read)) {
+        return false;
+    }
+    !READ_EXCEPTIONS.contains(&tail.as_str())
 }
 
-/// The first camel-case segment of a method or path name.
+/// Whether the method path is shaped like `<package>.<Service>/<Method>`.
 ///
-/// `session.v1.SessionService/DeletePasskey` → `Delete`;
-/// `PageGetUserSpaces` → `Page`; `delete` → `delete`.
-fn leading_segment(name: &str) -> String {
-    // Use the part after the last `/`: the service name carries no verb.
-    let tail = name.rsplit('/').next().unwrap_or(name);
-    let mut out = String::new();
-    for (index, ch) in tail.chars().enumerate() {
-        if index > 0 && ch.is_ascii_uppercase() {
-            break;
-        }
-        if ch == '_' || ch == '-' {
-            break;
-        }
-        out.push(ch);
-        let _ = index;
-    }
-    out
+/// Exactly one `/`, no `#` and no `?`. A URL fragment or query would be ignored
+/// by the transport's routing but not by this check, which is how
+/// `…/DeletePasskey#/Get` could look like a read and still delete.
+pub fn is_well_formed_method(name: &str) -> bool {
+    !name.contains('#') && !name.contains('?') && name.matches('/').count() == 1
 }
 
 #[cfg(test)]
@@ -261,7 +273,9 @@ mod tests {
     #[test]
     fn global_and_known_flags_pass() {
         let a = args_of(&["doctor", "--live", "--json", "--state", "d"]);
-        assert!(reject_unknown_flags("doctor", &a, &["state"], &["live", "json"], &["json"]).is_ok());
+        assert!(
+            reject_unknown_flags("doctor", &a, &["state"], &["live", "json"], &["json"]).is_ok()
+        );
     }
 
     #[test]
@@ -317,6 +331,36 @@ mod tests {
     }
 
     #[test]
+    fn a_malformed_method_path_is_never_a_read() {
+        // `#` or `?` is ignored by routing but not by a naive name check, so a
+        // destructive call could satisfy a read check and still delete.
+        for name in [
+            "user.v1.UserAuthService/DeletePasskey#/Get",
+            "user.v1.UserAuthService/DeletePasskey?x=/Get",
+            "user.v1.UserAuthService/GetSession/DeletePasskey",
+        ] {
+            assert!(state_changing_method(name), "{name} must be gated");
+        }
+    }
+
+    #[test]
+    fn read_prefixes_match_multi_word_leaders() {
+        // Prefix matching, not exact word matching: `AutocompleteAddress` is one
+        // leader spelled with two words.
+        assert!(!state_changing_method("x/AutocompleteAddress"));
+        assert!(!state_changing_method("x/Oauth2Authorize"));
+        assert!(!state_changing_method("x/UserInfo"));
+        assert!(state_changing_method("x/AcceptInvite"));
+    }
+
+    #[test]
+    fn methods_list_is_a_command_boolean() {
+        assert!(command_booleans("methods").contains(&"list"));
+        assert!(command_booleans("doctor").contains(&"json"));
+        assert!(command_booleans("rpc").is_empty());
+    }
+
+    #[test]
     fn the_body_transport_does_not_change_the_verdict() {
         // A body key that happens to look like a verb used to flip the verdict
         // and, worse, only for `--json`. The name decides now, so all three
@@ -337,11 +381,10 @@ mod tests {
             vec![write, "--json", "{}"],
         ] {
             let a = args_of(&form);
-            assert!(is_destructive_command("rpc", &a), "{form:?} should be gated");
+            assert!(
+                is_destructive_command("rpc", &a),
+                "{form:?} should be gated"
+            );
         }
     }
 }
-
-
-
-

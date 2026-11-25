@@ -50,12 +50,7 @@ fn write_message(lock: &Arc<Mutex<()>>, value: &Value) {
     let _ = stdout.flush();
 }
 
-fn tool(
-    name: &str,
-    description: &str,
-    properties: Value,
-    required: Vec<&str>,
-) -> Value {
+fn tool(name: &str, description: &str, properties: Value, required: Vec<&str>) -> Value {
     json!({
         "name": name,
         "description": description,
@@ -259,7 +254,11 @@ pub fn serve() -> Result<String, String> {
         };
 
         let id = msg.get("id").cloned();
-        let method = msg.get("method").and_then(Value::as_str).unwrap_or("").to_string();
+        let method = msg
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
 
         // Notifications carry no id and must not be answered.
         if id.is_none() {
@@ -329,7 +328,10 @@ pub fn serve() -> Result<String, String> {
                             "isError": true,
                         }),
                     };
-                    write_message(&lock, &json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+                    write_message(
+                        &lock,
+                        &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+                    );
                 }));
             }
             other => {
@@ -362,7 +364,11 @@ mod tests {
     fn tool_list_has_required_shape() {
         let list = tools();
         let arr = list.as_array().expect("tools is an array");
-        assert!(arr.len() >= 10, "expected at least 10 tools, got {}", arr.len());
+        assert!(
+            arr.len() >= 10,
+            "expected at least 10 tools, got {}",
+            arr.len()
+        );
         for entry in arr {
             assert!(entry["name"].as_str().is_some());
             assert!(entry["description"].as_str().is_some());
@@ -410,5 +416,3 @@ mod tests {
         assert!(call_tool("cue_rpc", &json!({})).is_err());
     }
 }
-
-

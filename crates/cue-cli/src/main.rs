@@ -106,9 +106,15 @@ JSON INPUT
   non-ASCII becomes '?' on the way into a pipe. Use --set or --json-file there.
 
 DESTRUCTIVE OPERATIONS
-  Commands that can change remote state require --confirm:
-  webdev-deploy, `mfa disable`, `mfa passkey-delete`, and an `rpc` or `raw`
-  whose method or body names a delete/update/create/deploy-style operation.
+  Every command that can change remote state requires --confirm: webdev-deploy,
+  new, send, `mfa` (enable/disable/totp/passkey/codes), `phone reset`, and any
+  `rpc`/`raw` whose method is not one of the read prefixes
+  (Get/List/Search/Page/Check/Query/View/Read/User).
+
+  The decision is made on the method name, and the default is `state-changing`:
+  a method the CLI has never seen is gated until its name says it reads. A
+  malformed method path (with `#` or `?`, or more than one `/`) is never treated
+  as a read.
 
 GLOBAL
   --state PATH   State file or directory. A directory holds `token` and `base`;
@@ -137,12 +143,26 @@ fn known_flags(command: &str) -> &'static [&'static str] {
         "webdev-deploy" => &["project", "version", "confirm"],
         "join" => &["seconds", "frames", "locale", "verbose"],
         "new" => &[
-            "text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
-            "country-iso", "verbose",
+            "text",
+            "seconds",
+            "frames",
+            "task-mode",
+            "delivery-mode",
+            "locale",
+            "country-iso",
+            "verbose",
+            "confirm",
         ],
         "send" => &[
-            "text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
-            "country-iso", "verbose",
+            "text",
+            "seconds",
+            "frames",
+            "task-mode",
+            "delivery-mode",
+            "locale",
+            "country-iso",
+            "verbose",
+            "confirm",
         ],
         "watch" => &["seconds", "frames", "locale"],
         "rpc" => &["set", "json", "json-file", "confirm"],
@@ -197,8 +217,14 @@ fn main() {
     let rest: Vec<String> = prefix.into_iter().chain(remaining[1..].to_vec()).collect();
     let args = cli::Args::parse(&rest);
 
-    // `--state` redirects the state path before anything reads it.
+    // `--state` redirects the state path before anything reads it. An empty value
+    // would fall through to the OS default, which looks like it worked while
+    // reading a directory the caller did not name.
     if let Some(path) = args.flag("state") {
+        if path.trim().is_empty() {
+            eprintln!("error: --state needs a path");
+            std::process::exit(2);
+        }
         // Safety: this runs before any other thread exists.
         env::set_var("CUE_STATE", path);
     }
@@ -214,6 +240,13 @@ fn main() {
         std::process::exit(2);
     }
 
+    // An explicit help request is a read of the usage text, not a request to run
+    // the command. It has to win over every gate, otherwise `mfa disable --help`
+    // tries to disable MFA while printing how to use it.
+    if args.has("help") {
+        usage_ok();
+    }
+
     // A command that can change remote state has to say so. Argument validation
     // runs first, so `webdev-deploy` with no --project reports the missing
     // argument instead of asking for --confirm on a call that cannot start.
@@ -221,7 +254,11 @@ fn main() {
         eprintln!("error: {err}");
         std::process::exit(2);
     }
-    if body::is_destructive_command(&command, &args) && !args.has("confirm") {
+    // `--confirm` is a switch. `--confirm=false` parses as a *flag* with the
+    // value "false", and `has()` would treat that as consent; require the bare
+    // switch so the answer has to be unambiguous.
+    let confirmed = args.flag("confirm").is_none() && args.has("confirm");
+    if body::is_destructive_command(&command, &args) && !confirmed {
         eprintln!("error: `cue {command}` can change remote state; add --confirm");
         std::process::exit(2);
     }
@@ -229,7 +266,10 @@ fn main() {
     let flags = legacy_flags(&args);
 
     let result = match command.as_str() {
-        "login" => commands::login(args.flag("token").map(str::to_string).as_ref(), args.flag("base").map(str::to_string).as_ref()),
+        "login" => commands::login(
+            args.flag("token").map(str::to_string).as_ref(),
+            args.flag("base").map(str::to_string).as_ref(),
+        ),
         "phone" => commands::phone(args.positional(0).map(str::to_string).as_ref(), &flags),
         "mfa" => commands::mfa(args.positional(0).map(str::to_string).as_ref(), &flags),
         "logout" => commands::logout(),
@@ -251,7 +291,11 @@ fn main() {
             args.flag("frames").map(str::to_string).as_ref(),
             args.flag("locale").map(str::to_string).as_ref(),
         ),
-        "send" => commands::send(args.positional(0).map(str::to_string).as_ref(), args.flag("text").map(str::to_string).as_ref(), &flags),
+        "send" => commands::send(
+            args.positional(0).map(str::to_string).as_ref(),
+            args.flag("text").map(str::to_string).as_ref(),
+            &flags,
+        ),
         "new" => commands::new_session(args.flag("text").map(str::to_string).as_ref(), &flags),
         "sandbox" => commands::sandbox(args.positional(0).map(str::to_string).as_ref()),
         "telecom" => commands::telecom(),
@@ -278,7 +322,7 @@ fn main() {
             } else {
                 commands::methods()
             }
-        },
+        }
         "version" => Ok(format!("cue {}", env!("CARGO_PKG_VERSION"))),
         "mcp" => mcp::serve(),
         "--help" | "-h" | "help" => usage_ok(),
@@ -342,22 +386,27 @@ fn status_output(args: &cli::Args) -> String {
     if args.has("json") {
         pretty(&value)
     } else {
-        let signed_in = value.get("signed_in").and_then(Value::as_bool).unwrap_or(false);
+        let signed_in = value
+            .get("signed_in")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let state_path = value
             .get("state_path")
             .and_then(Value::as_str)
             .unwrap_or("-");
         let base = value.get("base").and_then(Value::as_str).unwrap_or("-");
-        let identity = value
-            .get("identity_check")
-            .cloned()
-            .unwrap_or(Value::Null);
+        let identity = value.get("identity_check").cloned().unwrap_or(Value::Null);
         let ok = identity.get("ok").and_then(Value::as_bool).unwrap_or(false);
         let mut out = String::new();
         out.push_str(&format!("state_path: {state_path}\n"));
         out.push_str(&format!("base:       {base}\n"));
         out.push_str(&format!(
-            "signed_in:  {signed_in} (a token is stored; this does not prove it is accepted)\n"
+            "signed_in:  {signed_in} ({})\n",
+            if signed_in {
+                "a token is stored; this does not prove it is accepted"
+            } else {
+                "no token; run `cue login`"
+            }
         ));
         out.push_str(&format!(
             "identity:   {}\n",
@@ -431,10 +480,3 @@ pub fn write_state(path: &Path, contents: &str) -> Result<(), String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
-
-
-
-
-
-
-

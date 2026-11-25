@@ -118,8 +118,8 @@ CI の Linux ジョブで初めて実測される）。トークンの値は標�
 
 ```
 cargo build --release          # ルートからビルドできる（ワークスペース）
-cargo test                     # 50/50 PASS（オフライン）
-python tests/run_smoke.py      # 80/80 PASS（実サービス、認証不要の範囲）
+cargo test                     # 53/53 PASS（オフライン）
+python tests/run_smoke.py      # 87/87 PASS（実サービス、認証不要の範囲）
 python tests/run_live.py       # 17 PASS / 2 SKIP / 0 FAIL（要ログイン、読み取りのみ）
 python tests/mcp_probe.py      # 遅いツールが読み取りループを塞がないこと
 python tests/check_docs.py     # 文書に書いた件数がファイルと一致すること
@@ -153,6 +153,7 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
 
 
 
