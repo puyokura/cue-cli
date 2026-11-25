@@ -27,7 +27,10 @@ pub enum Frame {
     /// Namespace connect failure: `44{...}`.
     ConnectError(Value),
     /// Event packet: `42["name", ...]`.
-    Event { name: String, args: Value },
+    Event {
+        name: String,
+        args: Value,
+    },
     /// Ack packet from the server.
     Ack(Value),
     /// Engine.IO ping / pong.
@@ -122,7 +125,9 @@ pub fn run(
         headers.insert("Origin", "https://manus.im".parse().unwrap());
         headers.insert(
             "User-Agent",
-            format!("cue-cli/{}", env!("CARGO_PKG_VERSION")).parse().unwrap(),
+            format!("cue-cli/{}", env!("CARGO_PKG_VERSION"))
+                .parse()
+                .unwrap(),
         );
     }
 
@@ -198,7 +203,14 @@ pub fn run(
                 socket
                     .send(Message::Text(packet.clone().into()))
                     .map_err(|e| format!("send connect packet: {e}"))?;
-                printer(&format!("-> 40{{\"token\":{}}}", if token.is_some() { "\"<redacted>\"" } else { "" }));
+                printer(&format!(
+                    "-> 40{{\"token\":{}}}",
+                    if token.is_some() {
+                        "\"<redacted>\""
+                    } else {
+                        ""
+                    }
+                ));
                 sent_auth = true;
             }
             Frame::Ping => {
@@ -274,4 +286,3 @@ mod tests {
         assert!(matches!(decode("3"), Frame::Pong));
     }
 }
-

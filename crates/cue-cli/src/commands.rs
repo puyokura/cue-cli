@@ -59,7 +59,8 @@ pub fn login(token: Option<&String>, base: Option<&String>) -> Result<String, St
     if token.is_none() {
         return login_interactive(base);
     }
-    let token = token.ok_or("login requires --token <value> (a bearer token issued by the service)")?;
+    let token =
+        token.ok_or("login requires --token <value> (a bearer token issued by the service)")?;
     let token = token.trim();
     if token.is_empty() {
         return Err("--token is empty".into());
@@ -133,7 +134,9 @@ pub fn phone(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<St
             let id = flags
                 .get("id")
                 .ok_or("phone verify requires --id <verificationId>")?;
-            let code = flags.get("code").ok_or("phone verify requires --code <sms code>")?;
+            let code = flags
+                .get("code")
+                .ok_or("phone verify requires --code <sms code>")?;
             let resp = crate::phone::login_with_code(&base, id, code)?;
             let token = crate::phone::extract_token(&resp)?;
             let user = store_verified_token(&base, &token)?;
@@ -162,7 +165,9 @@ pub fn phone(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<St
             let id = flags
                 .get("id")
                 .ok_or("phone reset requires --id <verificationId>")?;
-            let code = flags.get("code").ok_or("phone reset requires --code <sms code>")?;
+            let code = flags
+                .get("code")
+                .ok_or("phone reset requires --code <sms code>")?;
             let password = read_secret("new password")?;
             let resp = crate::phone::reset_password(&base, id, code, &password)?;
             Ok(pretty(&redact(&resp)))
@@ -277,7 +282,8 @@ pub fn rpc(method: Option<&String>, args: &crate::cli::Args) -> Result<String, S
 /// Call any RPC with an already-parsed body. MCP tools arrive as JSON, not as a
 /// command line, so they cannot go through `cli::Args`.
 pub fn rpc_with_body(method: Option<&String>, payload: &Value) -> Result<String, String> {
-    let method = method.ok_or("rpc requires <Service.Method> (e.g. user.v1.UserService/UserInfo)")?;
+    let method =
+        method.ok_or("rpc requires <Service.Method> (e.g. user.v1.UserService/UserInfo)")?;
     let path = if method.starts_with('/') {
         method.clone()
     } else {
@@ -321,10 +327,7 @@ pub fn methods() -> Result<String, String> {
         .join(relative);
     let text = fs::read_to_string(&path)
         .map_err(|e| format!("read {relative} (looked at {}): {e}", path.display()))?;
-    let count = text
-        .lines()
-        .filter(|l| l.trim().starts_with('/'))
-        .count();
+    let count = text.lines().filter(|l| l.trim().starts_with('/')).count();
     Ok(json!({ "inventory": relative, "methods": count }).to_string())
 }
 
@@ -337,8 +340,7 @@ pub fn methods_list() -> Result<String, String> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join(relative);
-    let text = fs::read_to_string(&path)
-        .map_err(|e| format!("read {relative}: {e}"))?;
+    let text = fs::read_to_string(&path).map_err(|e| format!("read {relative}: {e}"))?;
     let rows: Vec<&str> = text
         .lines()
         .map(str::trim)
@@ -374,17 +376,24 @@ pub fn watch(
         ("locale".to_string(), locale_value),
         ("tz".to_string(), "Asia/Tokyo".to_string()),
         ("clientType".to_string(), "CUE".to_string()),
+        ("clientVersion".to_string(), "1.2.0".to_string()),
         (
-            "clientVersion".to_string(),
-            "1.2.0".to_string(),
+            "x-product-name".to_string(),
+            crate::client::PRODUCT_NAME.to_string(),
         ),
-        ("x-product-name".to_string(), crate::client::PRODUCT_NAME.to_string()),
     ];
 
     let mut out: Vec<String> = Vec::new();
-    crate::socket::run(&ws_base, token.as_deref(), &query, secs, max_frames, &mut |line| {
-        out.push(line.to_string());
-    })?;
+    crate::socket::run(
+        &ws_base,
+        token.as_deref(),
+        &query,
+        secs,
+        max_frames,
+        &mut |line| {
+            out.push(line.to_string());
+        },
+    )?;
     Ok(out.join("\n"))
 }
 
@@ -392,7 +401,11 @@ pub fn watch(
 ///
 /// Refuses to send without a stored token: the socket accepts an unauthenticated
 /// handshake but rejects the namespace, so a send would produce no result.
-pub fn send(session_id: Option<&String>, text: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+pub fn send(
+    session_id: Option<&String>,
+    text: Option<&String>,
+    flags: &HashMap<String, String>,
+) -> Result<String, String> {
     let session_id = session_id.ok_or("send requires <session_id>")?;
     let text = text.ok_or("send requires --text <prompt>")?;
     if text.trim().is_empty() {
@@ -409,9 +422,18 @@ pub fn send(session_id: Option<&String>, text: Option<&String>, flags: &HashMap<
         Some(s) => s.parse().map_err(|_| "--frames must be a number")?,
         None => 400,
     };
-    let task_mode = flags.get("task-mode").cloned().unwrap_or_else(|| "standard".into());
-    let delivery_mode = flags.get("delivery-mode").cloned().unwrap_or_else(|| "interrupt".into());
-    let locale = flags.get("locale").cloned().unwrap_or_else(|| "ja-JP".into());
+    let task_mode = flags
+        .get("task-mode")
+        .cloned()
+        .unwrap_or_else(|| "standard".into());
+    let delivery_mode = flags
+        .get("delivery-mode")
+        .cloned()
+        .unwrap_or_else(|| "interrupt".into());
+    let locale = flags
+        .get("locale")
+        .cloned()
+        .unwrap_or_else(|| "ja-JP".into());
     let verbose = flags.contains_key("verbose");
 
     let ws_base = match std::env::var("CUE_WS_URL") {
@@ -482,7 +504,6 @@ fn hex_encode(bytes: &[u8]) -> String {
     }
     s
 }
-
 
 /// `cue discover <service> <method>` — test whether a Connect route exists.
 ///
@@ -627,9 +648,9 @@ pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<Stri
             let flow = flags
                 .get("flow")
                 .ok_or("mfa passkey-finish requires --flow <flowId>")?;
-            let credential = flags
-                .get("credential")
-                .ok_or("mfa passkey-finish requires --credential <credential JSON from the authenticator>")?;
+            let credential = flags.get("credential").ok_or(
+                "mfa passkey-finish requires --credential <credential JSON from the authenticator>",
+            )?;
             let parsed: Value = serde_json::from_str(credential)
                 .map_err(|e| format!("--credential is not valid JSON: {e}"))?;
             let mut body = json!({
@@ -664,14 +685,16 @@ pub fn mfa(sub: Option<&String>, flags: &HashMap<String, String>) -> Result<Stri
     }
 }
 
-
 /// `cue join <session_id>` — subscribe to a session and observe what the server
 /// sends, without posting a prompt. Used to verify session subscription and the
 /// event replay (`eventsNotifyEventsAfter`) separately from message sending.
-pub fn join(session_id: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+pub fn join(
+    session_id: Option<&String>,
+    flags: &HashMap<String, String>,
+) -> Result<String, String> {
     let session_id = session_id.ok_or("join requires <session_id>")?;
-    let token = client::stored_token()
-        .ok_or_else(|| "no token; run `cue login` first".to_string())?;
+    let token =
+        client::stored_token().ok_or_else(|| "no token; run `cue login` first".to_string())?;
     let seconds: u64 = match flags.get("seconds") {
         Some(s) => s.parse().map_err(|_| "--seconds must be a number")?,
         None => 20,
@@ -680,7 +703,10 @@ pub fn join(session_id: Option<&String>, flags: &HashMap<String, String>) -> Res
         Some(s) => s.parse().map_err(|_| "--frames must be a number")?,
         None => 80,
     };
-    let locale = flags.get("locale").cloned().unwrap_or_else(|| "ja-JP".into());
+    let locale = flags
+        .get("locale")
+        .cloned()
+        .unwrap_or_else(|| "ja-JP".into());
     let ws_base = match std::env::var("CUE_WS_URL") {
         Ok(v) if !v.trim().is_empty() => v.trim_end_matches('/').to_string(),
         _ => "wss://api.manus.im".to_string(),
@@ -705,8 +731,11 @@ pub fn join(session_id: Option<&String>, flags: &HashMap<String, String>) -> Res
     out.push(String::new());
     out.push(format!(
         "summary: engine_open={} namespace_ok={} joined={} events={} chat_frames={}",
-        outcome.engine_open, outcome.namespace_ok, outcome.joined,
-        outcome.events, outcome.chat_frames
+        outcome.engine_open,
+        outcome.namespace_ok,
+        outcome.joined,
+        outcome.events,
+        outcome.chat_frames
     ));
     if let Some(err) = outcome.namespace_error {
         out.push(format!("namespace_error: {err}"));
@@ -724,33 +753,137 @@ pub fn coverage() -> Result<String, String> {
 
     let probes: Vec<(&str, &str, serde_json::Value)> = vec![
         ("user info", "/user.v1.UserService/UserInfo", json!({})),
-        ("client config", "/user.v1.UserService/GetUserClientConfig", json!({})),
-        ("credits", "/user.v1.UserService/GetAvailableCredits", json!({})),
-        ("region codes", "/user.v1.UserService/ListRegionCode", json!({})),
-        ("phone auth info", "/user.v1.UserAuthService/GetCuePhoneAuthInfo", json!({})),
-        ("login methods", "/user.v1.UserAuthService/ListLoginMethods", json!({})),
-        ("mfa status", "/user.v1.UserAuthService/GetMfaStatus", json!({})),
-        ("passkeys", "/user.v1.UserAuthService/ListPasskeys", json!({})),
-        ("trusted phones", "/user.v1.UserAuthService/ListCueTrustedPhoneNumbers", json!({})),
-        ("sessions", "/session.v1.SessionService/SearchAgentSessions", json!({"query":"","limit":20})),
-        ("agents", "/agents.v1.AgentsService/ListAgentsV2", json!({"agentsLimit":20,"channelsLimit":20})),
+        (
+            "client config",
+            "/user.v1.UserService/GetUserClientConfig",
+            json!({}),
+        ),
+        (
+            "credits",
+            "/user.v1.UserService/GetAvailableCredits",
+            json!({}),
+        ),
+        (
+            "region codes",
+            "/user.v1.UserService/ListRegionCode",
+            json!({}),
+        ),
+        (
+            "phone auth info",
+            "/user.v1.UserAuthService/GetCuePhoneAuthInfo",
+            json!({}),
+        ),
+        (
+            "login methods",
+            "/user.v1.UserAuthService/ListLoginMethods",
+            json!({}),
+        ),
+        (
+            "mfa status",
+            "/user.v1.UserAuthService/GetMfaStatus",
+            json!({}),
+        ),
+        (
+            "passkeys",
+            "/user.v1.UserAuthService/ListPasskeys",
+            json!({}),
+        ),
+        (
+            "trusted phones",
+            "/user.v1.UserAuthService/ListCueTrustedPhoneNumbers",
+            json!({}),
+        ),
+        (
+            "sessions",
+            "/session.v1.SessionService/SearchAgentSessions",
+            json!({"query":"","limit":20}),
+        ),
+        (
+            "agents",
+            "/agents.v1.AgentsService/ListAgentsV2",
+            json!({"agentsLimit":20,"channelsLimit":20}),
+        ),
         ("skills", "/skill.v1.SkillService/ListSkills", json!({})),
-        ("connectors", "/connectors.v1.ConnectorsService/ListConnectors", json!({})),
-        ("notifications", "/notifier.v1.NotificationService/GetNotificationListV2", json!({"limit":20})),
-        ("team", "/team.v1.TeamService/ListTeam", json!({"page":1,"pageSize":10})),
-        ("cloud pcs", "/cloud_pc.v1.CloudPCService/List", json!({"limit":20})),
-        ("phone numbers", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
-        ("remote control", "/device_authorization.v1.DeviceAuthorizationService/ListRemoteControlGrants", json!({})),
-        ("agent emails", "/telecom.v1.TelecomService/ListAgentEmails", json!({})),
-        ("telecom countries", "/telecom.v1.TelecomService/ListSupportedCountries", json!({})),
-        ("call rates", "/telecom.v1.TelecomService/GetCallRates", json!({})),
-        ("free phone", "/telecom.v1.TelecomService/GetFreePhoneSettings", json!({})),
-        ("agents membership", "/user.v1.SubscriptionService/GetAgentsMembership", json!({})),
-        ("agents credits", "/user.v1.SubscriptionService/GetAgentsAvailableCredits", json!({})),
-        ("email namespace", "/telecom.v1.TelecomService/GetAgentEmailNamespace", json!({})),
-        ("cloud pc regions", "/cloud_pc.v1.CloudPCService/ListAvailableRegions", json!({})),
-        ("webdev projects", "/webdev.v1.WebDevService/ListWebDevProjects", json!({"limit":10})),
-        ("projects", "/session.v1.ProjectService/ListProjects", json!({"limit":10})),
+        (
+            "connectors",
+            "/connectors.v1.ConnectorsService/ListConnectors",
+            json!({}),
+        ),
+        (
+            "notifications",
+            "/notifier.v1.NotificationService/GetNotificationListV2",
+            json!({"limit":20}),
+        ),
+        (
+            "team",
+            "/team.v1.TeamService/ListTeam",
+            json!({"page":1,"pageSize":10}),
+        ),
+        (
+            "cloud pcs",
+            "/cloud_pc.v1.CloudPCService/List",
+            json!({"limit":20}),
+        ),
+        (
+            "phone numbers",
+            "/telecom.v1.TelecomService/ListPhoneInfo",
+            json!({}),
+        ),
+        (
+            "remote control",
+            "/device_authorization.v1.DeviceAuthorizationService/ListRemoteControlGrants",
+            json!({}),
+        ),
+        (
+            "agent emails",
+            "/telecom.v1.TelecomService/ListAgentEmails",
+            json!({}),
+        ),
+        (
+            "telecom countries",
+            "/telecom.v1.TelecomService/ListSupportedCountries",
+            json!({}),
+        ),
+        (
+            "call rates",
+            "/telecom.v1.TelecomService/GetCallRates",
+            json!({}),
+        ),
+        (
+            "free phone",
+            "/telecom.v1.TelecomService/GetFreePhoneSettings",
+            json!({}),
+        ),
+        (
+            "agents membership",
+            "/user.v1.SubscriptionService/GetAgentsMembership",
+            json!({}),
+        ),
+        (
+            "agents credits",
+            "/user.v1.SubscriptionService/GetAgentsAvailableCredits",
+            json!({}),
+        ),
+        (
+            "email namespace",
+            "/telecom.v1.TelecomService/GetAgentEmailNamespace",
+            json!({}),
+        ),
+        (
+            "cloud pc regions",
+            "/cloud_pc.v1.CloudPCService/ListAvailableRegions",
+            json!({}),
+        ),
+        (
+            "webdev projects",
+            "/webdev.v1.WebDevService/ListWebDevProjects",
+            json!({"limit":10}),
+        ),
+        (
+            "projects",
+            "/session.v1.ProjectService/ListProjects",
+            json!({"limit":10}),
+        ),
     ];
 
     let mut rows = Vec::new();
@@ -794,10 +927,6 @@ fn describe(value: &Value) -> Value {
     }
 }
 
-
-
-
-
 /// Strip credential-bearing fields from any response before it is printed.
 ///
 /// A reset or login response can echo a token or a recovery code list. Printing
@@ -807,11 +936,26 @@ pub fn redact(value: &Value) -> Value {
     // Exact names seen in real responses. `sshPassword` was missed by the original
     // list, so a suffix rule below covers the family instead of one spelling.
     const SECRET_KEYS: &[&str] = &[
-        "token", "session_id", "sessionid", "access_token", "accesstoken",
-        "refresh_token", "refreshtoken", "secret", "password", "recovery_codes",
-        "recoverycodes", "credential_json", "credentialjson", "private_key",
-        "ssh_password", "sshpassword", "otpauth_uri", "otpauthuri",
-        "verification_code", "verificationcode",
+        "token",
+        "session_id",
+        "sessionid",
+        "access_token",
+        "accesstoken",
+        "refresh_token",
+        "refreshtoken",
+        "secret",
+        "password",
+        "recovery_codes",
+        "recoverycodes",
+        "credential_json",
+        "credentialjson",
+        "private_key",
+        "ssh_password",
+        "sshpassword",
+        "otpauth_uri",
+        "otpauthuri",
+        "verification_code",
+        "verificationcode",
     ];
 
     // A key whose name ends with one of these carries a credential in this API even
@@ -822,9 +966,16 @@ pub fn redact(value: &Value) -> Value {
         if SECRET_KEYS.contains(&lower.as_str()) {
             return true;
         }
-        ["password", "passwd", "token", "secret", "privatekey", "private_key"]
-            .iter()
-            .any(|suffix| lower.ends_with(suffix))
+        [
+            "password",
+            "passwd",
+            "token",
+            "secret",
+            "privatekey",
+            "private_key",
+        ]
+        .iter()
+        .any(|suffix| lower.ends_with(suffix))
     }
     match value {
         Value::Object(map) => {
@@ -846,7 +997,6 @@ pub fn redact(value: &Value) -> Value {
         other => other.clone(),
     }
 }
-
 
 #[cfg(test)]
 mod redaction_tests {
@@ -882,14 +1032,15 @@ mod redaction_tests {
     }
 }
 
-
-
 /// `cue new --text <prompt>` — start a brand-new session.
 ///
 /// Measured: the service does not mint a session id for a client. The web client
 /// generates a 22-character base62 id locally and sends it in `user_message`
 /// against a session that does not exist yet; the server persists it on first use.
-pub fn new_session(text: Option<&String>, flags: &HashMap<String, String>) -> Result<String, String> {
+pub fn new_session(
+    text: Option<&String>,
+    flags: &HashMap<String, String>,
+) -> Result<String, String> {
     let text = text.ok_or("new requires --text <prompt>")?;
     if text.trim().is_empty() {
         return Err("--text is empty".into());
@@ -946,14 +1097,11 @@ pub fn sandbox(session_id: Option<&String>) -> Result<String, String> {
     })))
 }
 
-
 /// `cue webdev` — list WebDev projects (read-only).
 pub fn webdev(limit: Option<&String>) -> Result<String, String> {
     let token = authed()?;
     let origin = base();
-    let n = limit
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(20);
+    let n = limit.and_then(|s| s.parse::<u32>().ok()).unwrap_or(20);
     let value = client::call_json(
         &origin,
         "/webdev.v1.WebDevService/ListWebDevProjects",
@@ -968,10 +1116,7 @@ pub fn webdev(limit: Option<&String>) -> Result<String, String> {
 /// Measured contract: `DeployWebDevProject` requires both `project_id` and
 /// `version_id`; `version_id` comes from `GetWebDevProject.checkpoints[]`.
 /// This publishes to the internet, so it is a separate, explicit command.
-pub fn webdev_deploy(
-    project: Option<&String>,
-    version: Option<&String>,
-) -> Result<String, String> {
+pub fn webdev_deploy(project: Option<&String>, version: Option<&String>) -> Result<String, String> {
     let project = project.ok_or("webdev-deploy requires --project <projectId>")?;
     let version = version.ok_or(
         "webdev-deploy requires --version <versionId> (from `cue webdev --detail <projectId>`)",
@@ -1001,7 +1146,6 @@ pub fn webdev_detail(project: Option<&String>) -> Result<String, String> {
     Ok(pretty(&redact(&value)))
 }
 
-
 #[cfg(test)]
 mod redaction_suffix_tests {
     use super::redact;
@@ -1023,7 +1167,13 @@ mod redaction_suffix_tests {
             "clientSecret": "d", "xPrivateKey": "e", "note": "keep"
         });
         let r = redact(&v);
-        for key in ["newPassword", "rootPassword", "apiToken", "clientSecret", "xPrivateKey"] {
+        for key in [
+            "newPassword",
+            "rootPassword",
+            "apiToken",
+            "clientSecret",
+            "xPrivateKey",
+        ] {
             assert_eq!(r[key]["redacted"], true, "{key} should be masked");
         }
         assert_eq!(r["note"], "keep");
@@ -1040,12 +1190,36 @@ pub fn telecom() -> Result<String, String> {
 
     let mut out = serde_json::Map::new();
     for (label, path, body) in [
-        ("countries", "/telecom.v1.TelecomService/ListSupportedCountries", json!({})),
-        ("rates", "/telecom.v1.TelecomService/GetCallRates", json!({})),
-        ("freePhoneSettings", "/telecom.v1.TelecomService/GetFreePhoneSettings", json!({})),
-        ("phoneInfo", "/telecom.v1.TelecomService/ListPhoneInfo", json!({})),
-        ("callHistory", "/telecom.v1.TelecomService/ListCallHistory", json!({"limit": 10})),
-        ("agentEmails", "/telecom.v1.TelecomService/ListAgentEmails", json!({})),
+        (
+            "countries",
+            "/telecom.v1.TelecomService/ListSupportedCountries",
+            json!({}),
+        ),
+        (
+            "rates",
+            "/telecom.v1.TelecomService/GetCallRates",
+            json!({}),
+        ),
+        (
+            "freePhoneSettings",
+            "/telecom.v1.TelecomService/GetFreePhoneSettings",
+            json!({}),
+        ),
+        (
+            "phoneInfo",
+            "/telecom.v1.TelecomService/ListPhoneInfo",
+            json!({}),
+        ),
+        (
+            "callHistory",
+            "/telecom.v1.TelecomService/ListCallHistory",
+            json!({"limit": 10}),
+        ),
+        (
+            "agentEmails",
+            "/telecom.v1.TelecomService/ListAgentEmails",
+            json!({}),
+        ),
     ] {
         match client::call_json(&origin, path, Some(&token), &body) {
             Ok(v) => {
@@ -1058,8 +1232,3 @@ pub fn telecom() -> Result<String, String> {
     }
     Ok(pretty(&Value::Object(out)))
 }
-
-
-
-
-

@@ -17,14 +17,7 @@ use std::collections::BTreeMap;
 /// The parser cannot tell `--live` (a bare switch) from `--frames 40` (a flag
 /// with a value) by shape alone, so this list is authoritative. Without it,
 /// `cue doctor --live --json` would consume `--json` as the value of `--live`.
-pub const BOOLEAN_SWITCHES: &[&str] = &[
-    "confirm",
-    "live",
-    "verbose",
-    "help",
-    "recursive",
-    "all",
-];
+pub const BOOLEAN_SWITCHES: &[&str] = &["confirm", "live", "verbose", "help", "recursive", "all"];
 
 pub fn is_boolean_switch(name: &str) -> bool {
     BOOLEAN_SWITCHES.contains(&name)
@@ -248,5 +241,3 @@ mod tests {
         assert_eq!(parse_scalar("text"), serde_json::json!("text"));
     }
 }
-
-

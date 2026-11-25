@@ -93,11 +93,7 @@ pub fn send_code(base: &str, phone: &str, purpose: Purpose) -> Result<CodeReques
 }
 
 /// Exchange a verification id + SMS code for a session token.
-pub fn login_with_code(
-    base: &str,
-    verification_id: &str,
-    code: &str,
-) -> Result<Value, String> {
+pub fn login_with_code(base: &str, verification_id: &str, code: &str) -> Result<Value, String> {
     let body = json!({
         "verification_id": verification_id,
         "code": code,
@@ -131,7 +127,13 @@ pub fn reset_password(
 
 /// Pull the session token out of a login response, whichever field carries it.
 pub fn extract_token(value: &Value) -> Result<String, String> {
-    for key in ["token", "sessionId", "session_id", "accessToken", "access_token"] {
+    for key in [
+        "token",
+        "sessionId",
+        "session_id",
+        "accessToken",
+        "access_token",
+    ] {
         if let Some(t) = value.get(key).and_then(Value::as_str) {
             if !t.is_empty() {
                 return Ok(t.to_string());
@@ -171,16 +173,16 @@ mod tests {
     fn parses_purpose_names() {
         assert_eq!(parse_purpose("login").unwrap(), Purpose::Login);
         assert_eq!(parse_purpose("1").unwrap(), Purpose::Login);
-        assert_eq!(parse_purpose("reset_password").unwrap(), Purpose::ResetPassword);
+        assert_eq!(
+            parse_purpose("reset_password").unwrap(),
+            Purpose::ResetPassword
+        );
         assert!(parse_purpose("nope").is_err());
     }
 
     #[test]
     fn extracts_tokens_from_known_shapes() {
-        assert_eq!(
-            extract_token(&json!({"token": "t"})).unwrap(),
-            "t"
-        );
+        assert_eq!(extract_token(&json!({"token": "t"})).unwrap(), "t");
         assert_eq!(
             extract_token(&json!({"user": {"token": "u"}})).unwrap(),
             "u"
@@ -188,4 +190,3 @@ mod tests {
         assert!(extract_token(&json!({"ok": true})).is_err());
     }
 }
-

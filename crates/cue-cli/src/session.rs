@@ -50,7 +50,10 @@ pub fn run(plan: Plan<'_>, out: &mut dyn FnMut(&str)) -> Result<Outcome, String>
         ("tz".to_string(), "Asia/Tokyo".to_string()),
         ("clientType".to_string(), "CUE".to_string()),
         ("clientVersion".to_string(), "1.2.0".to_string()),
-        ("x-product-name".to_string(), crate::client::PRODUCT_NAME.to_string()),
+        (
+            "x-product-name".to_string(),
+            crate::client::PRODUCT_NAME.to_string(),
+        ),
     ];
 
     let mut request = format!(
@@ -69,7 +72,9 @@ pub fn run(plan: Plan<'_>, out: &mut dyn FnMut(&str)) -> Result<Outcome, String>
         headers.insert("Origin", "https://manus.im".parse().unwrap());
         headers.insert(
             "User-Agent",
-            format!("cue-cli/{}", env!("CARGO_PKG_VERSION")).parse().unwrap(),
+            format!("cue-cli/{}", env!("CARGO_PKG_VERSION"))
+                .parse()
+                .unwrap(),
         );
     }
 
@@ -248,7 +253,10 @@ fn record_event(name: &str, args: &Value, outcome: &mut Outcome, out: &mut dyn F
                 out(&line);
             }
             "statusUpdate" => {
-                let status = event.get("agentStatus").and_then(Value::as_str).unwrap_or("");
+                let status = event
+                    .get("agentStatus")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
                 out(&format!("status {status}"));
             }
             "liveStatus" => {
@@ -279,7 +287,10 @@ fn record_event(name: &str, args: &Value, outcome: &mut Outcome, out: &mut dyn F
             outcome.transcript.push(line.clone());
             out(&line);
         }
-        "" => out(&format!("event::{name} {}", truncate(&payload.to_string(), 300))),
+        "" => out(&format!(
+            "event::{name} {}",
+            truncate(&payload.to_string(), 300)
+        )),
         other => out(&format!("{other} {}", truncate(&payload.to_string(), 300))),
     }
 }
@@ -324,6 +335,3 @@ fn urlencode(s: &str) -> String {
     }
     out
 }
-
-
-

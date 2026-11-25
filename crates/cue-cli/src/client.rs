@@ -74,7 +74,11 @@ fn connect_error(status: u16, body: &str) -> String {
             let code = v.get("code").and_then(Value::as_str).unwrap_or("-");
             // The service wraps its real reason in `details[].debug.message` and puts only
             // an opaque `Error<NNNN>` in `message`. Prefer the debug message when present.
-            let mut message = v.get("message").and_then(Value::as_str).unwrap_or("-").to_string();
+            let mut message = v
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("-")
+                .to_string();
             let mut detail_code: Option<String> = None;
             if let Some(details) = v.get("details").and_then(Value::as_array) {
                 for d in details {
@@ -222,12 +226,3 @@ pub fn get_rest(base: &str, path_and_query: &str, token: Option<&str>) -> Result
     }
     serde_json::from_str(&body).map_err(|e| format!("decode {path_and_query}: {e}"))
 }
-
-
-
-
-
-
-
-
-

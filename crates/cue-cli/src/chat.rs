@@ -18,7 +18,6 @@
 
 use serde_json::{json, Map, Value};
 
-
 /// Recursively normalise every object key to snake_case.
 /// Normalise a frame for the wire.
 ///
@@ -182,7 +181,16 @@ mod tests {
 
     #[test]
     fn user_message_matches_observed_shape() {
-        let m = user_message("id1", "sess", "hi", "standard", "text", "interrupt", Some("JP"), None);
+        let m = user_message(
+            "id1",
+            "sess",
+            "hi",
+            "standard",
+            "text",
+            "interrupt",
+            Some("JP"),
+            None,
+        );
         assert_eq!(m["type"], "user_message");
         assert_eq!(m["sessionId"], "sess");
         assert_eq!(m["messageType"], "text");
@@ -207,10 +215,7 @@ mod tests {
         for _ in 0..1000 {
             let id = message_id();
             assert_eq!(id.len(), 22, "id was {id}");
-            assert!(
-                id.chars().all(|c| c.is_ascii_alphanumeric()),
-                "id was {id}"
-            );
+            assert!(id.chars().all(|c| c.is_ascii_alphanumeric()), "id was {id}");
         }
     }
 
@@ -222,8 +227,3 @@ mod tests {
         }
     }
 }
-
-
-
-
-
