@@ -1,9 +1,9 @@
 [package]
 name = "cue-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "Independent command-line client for the Cue (ai.manus.agents) service"
+description = "Independent command-line client for the Cue service"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -14,3 +14,5 @@ ureq = { version = "3", features = ["json"] }
 [[bin]]
 name = "cue"
 path = "src/main.rs"
+
+
