@@ -547,4 +547,3 @@ pub fn write_state(path: &Path, contents: &str) -> Result<(), String> {
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
-
