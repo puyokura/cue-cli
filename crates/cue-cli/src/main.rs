@@ -28,7 +28,7 @@ mod socket;
 mod state;
 
 /// Flags every command accepts.
-const GLOBAL_FLAGS: &[&str] = &["state", "help"];
+const GLOBAL_FLAGS: &[&str] = &["state", "help", "h"];
 
 /// Print usage and exit 0 (explicit help request).
 fn usage_ok() -> ! {
@@ -130,6 +130,42 @@ ENVIRONMENT
     );
 }
 
+/// The command names this binary implements.
+const COMMANDS: &[&str] = &[
+    "login",
+    "logout",
+    "whoami",
+    "status",
+    "doctor",
+    "settings",
+    "region",
+    "phone",
+    "mfa",
+    "sessions",
+    "session",
+    "agents",
+    "rpc",
+    "raw",
+    "watch",
+    "send",
+    "new",
+    "sandbox",
+    "telecom",
+    "webdev",
+    "webdev-deploy",
+    "join",
+    "discover",
+    "coverage",
+    "methods",
+    "version",
+    "mcp",
+    "help",
+];
+
+fn is_known_command(name: &str) -> bool {
+    COMMANDS.contains(&name)
+}
+
 /// Flags each command reads, beyond `GLOBAL_FLAGS`.
 fn known_flags(command: &str) -> &'static [&'static str] {
     match command {
@@ -167,12 +203,20 @@ fn known_flags(command: &str) -> &'static [&'static str] {
         "watch" => &["seconds", "frames", "locale"],
         "rpc" => &["set", "json", "json-file", "confirm"],
         "methods" => &["list"],
+        "discover" => &["confirm"],
         "raw" => &["bytes", "confirm"],
         _ => &[],
     }
 }
 
 fn main() {
+    // A set-but-empty state variable is reported rather than silently ignored;
+    // see state::empty_env_var.
+    if let Some(name) = state::empty_env_var() {
+        eprintln!("error: {name} is set but empty; give it a path or unset it");
+        std::process::exit(2);
+    }
+
     let raw: Vec<String> = env::args().skip(1).collect();
     if raw.is_empty() {
         usage();
@@ -243,7 +287,16 @@ fn main() {
     // An explicit help request is a read of the usage text, not a request to run
     // the command. It has to win over every gate, otherwise `mfa disable --help`
     // tries to disable MFA while printing how to use it.
-    if args.has("help") {
+    // An unknown command is a usage error, and --help does not change that: a
+    // typo plus `--help` must not read as a successful request for help.
+    if !is_known_command(&command) {
+        eprintln!("unknown command: {command}");
+        usage();
+    }
+
+    // `-h` is help wherever it appears; treating only `--help` as help meant
+    // `webdev-deploy ... -h` performed the deploy instead of printing usage.
+    if args.has("help") || args.has("h") {
         usage_ok();
     }
 
@@ -254,10 +307,22 @@ fn main() {
         eprintln!("error: {err}");
         std::process::exit(2);
     }
-    // `--confirm` is a switch. `--confirm=false` parses as a *flag* with the
-    // value "false", and `has()` would treat that as consent; require the bare
-    // switch so the answer has to be unambiguous.
-    let confirmed = args.flag("confirm").is_none() && args.has("confirm");
+    // `--confirm` is a switch, and consent has to be unambiguous.
+    //   --confirm=false      parsed as a flag with the value "false"
+    //   --confirm false      a switch followed by a stray positional
+    // The value form is caught by `flag(..).is_none()`; the stray positional is
+    // caught by looking for an answer-shaped word, because a script that writes
+    // `--confirm "$ANSWER"` otherwise opens the gate on "false".
+    let confirmed = args.has("confirm")
+        && args.flag("confirm").is_none()
+        && !args.positionals.iter().any(|p| is_a_denial(p));
+    if args.has("confirm") && !confirmed {
+        eprintln!(
+            "error: --confirm takes no value; `--confirm false` is not confirmation. \
+             Pass the bare switch."
+        );
+        std::process::exit(2);
+    }
     if body::is_destructive_command(&command, &args) && !confirmed {
         eprintln!("error: `cue {command}` can change remote state; add --confirm");
         std::process::exit(2);
@@ -418,6 +483,17 @@ fn status_output(args: &cli::Args) -> String {
         ));
         out
     }
+}
+
+/// Words that mean "no" when they land next to `--confirm`.
+///
+/// A script that writes `--confirm "$ANSWER"` must not open the gate on
+/// "false"; the answer has to be affirmative, or the switch has to be bare.
+fn is_a_denial(token: &str) -> bool {
+    matches!(
+        token.trim().to_ascii_lowercase().as_str(),
+        "false" | "0" | "no" | "off" | "n" | "none" | "null" | "deny" | "-h" | "-help"
+    )
 }
 
 fn doctor_output(args: &cli::Args) -> String {

@@ -162,9 +162,13 @@ def main():
     check("phone help exits 0", rc == 0, err)
     check("phone help lists the four subcommands", out.count("cue phone") == 4, out[:300])
 
+    # 12b. `discover` POSTs caller-supplied method names, so it is gated
+    rc, out, err = run(["discover", "user.v1.UserAuthService", "GetMfaStatus"], env_extra=env)
+    check("discover without --confirm is refused", rc == 2 and "--confirm" in err, err[:120])
+
     # 13. the discovery oracle must separate existing from missing routes
     rc, out, err = run(
-        ["discover", "user.v1.UserAuthService", "GetMfaStatus", "CreateTotp"],
+        ["discover", "user.v1.UserAuthService", "GetMfaStatus", "CreateTotp", "--confirm"],
         env_extra=env,
     )
     check("discover exits 0", rc == 0, err)
@@ -347,6 +351,8 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
 
 
 

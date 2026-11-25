@@ -165,6 +165,11 @@ pub fn is_destructive_command(command: &str, args: &crate::cli::Args) -> bool {
         }
         "rpc" => state_changing_method(args.positional(0).unwrap_or("")),
         "raw" => state_changing_method(args.positional(0).unwrap_or("")),
+        // `discover` POSTs method names the caller supplies. Today the server
+        // rejects every mutation it can reach without a token, but "the server
+        // will refuse" is not a gate: it is a coincidence of the current
+        // deployment, and a probe for a POST route should say so.
+        "discover" => true,
         _ => false,
     }
 }
@@ -193,8 +198,9 @@ const READ_PREFIXES: &[&str] = &[
 
 /// Leaders that are reads despite not being in `READ_PREFIXES`.
 ///
-/// Kept separate so the reasoning is visible per method rather than hidden in a
-/// prefix that happens to match.
+/// `ActiveIMUser` returns the instant-messaging identity bound to this account;
+/// the name starts with a verb that is not on the read list. It is the only
+/// exception, and it takes no arguments that could carry a mutation.
 const READ_EXCEPTIONS: &[&str] = &["activeimuser"];
 
 /// Whether this RPC method changes remote state.
@@ -217,7 +223,14 @@ pub fn state_changing_method(name: &str) -> bool {
 /// by the transport's routing but not by this check, which is how
 /// `…/DeletePasskey#/Get` could look like a read and still delete.
 pub fn is_well_formed_method(name: &str) -> bool {
-    !name.contains('#') && !name.contains('?') && name.matches('/').count() == 1
+    if name.contains('#') || name.contains('?') {
+        return false;
+    }
+    // Both `pkg.Service/Method` and `/pkg.Service/Method` are accepted, because
+    // the help text and the MCP schema advertise both. Anything else (two
+    // separators, a bare method name) is not a route this client understands.
+    let trimmed = name.strip_prefix('/').unwrap_or(name);
+    trimmed.matches('/').count() == 1
 }
 
 #[cfg(test)]

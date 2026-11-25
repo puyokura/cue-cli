@@ -35,9 +35,10 @@ Limits: cue_send and cue_new post a real prompt to a real account and wait for \
 the agent, so they are slow (tens of seconds) and leave a session behind. \
 cue_join blocks for its whole window. Prefer cue_rpc for reads.
 
-Destructive operations: publishing a site (cue webdev-deploy), disabling two-step \
-verification, and deleting a passkey change remote state. The CLI requires \
---confirm for them; there is no MCP tool that skips that, so ask the user first.
+Destructive operations: cue_rpc on a state-changing method, cue_new, and cue_send \
+change remote state. Each requires a boolean true under the key confirm, the same \
+rule as the CLI's --confirm flag. The string \"false\" is rejected rather than \
+treated as consent. Ask the user before passing it.
 
 Secrets: no tool prints a token, a password, or a recovery code. Values are \
 replaced with {redacted: true, bytes: N}. An empty object from a read usually \
@@ -88,18 +89,20 @@ fn tools() -> Value {
             "body": { "type": "object", "description": "request body (defaults to {})" },
             "confirm": { "type": "boolean", "description": "required for a method that changes remote state" }
         }), vec!["method"]),
-        tool("cue_send", "Join a session and post a prompt; returns what came back.", json!({
+        tool("cue_send", "Join a session and post a prompt; returns what came back. Needs \"confirm\": true.", json!({
             "session_id": { "type": "string" },
             "text": { "type": "string" },
-            "seconds": { "type": "integer", "description": "observation window" }
+            "seconds": { "type": "integer", "description": "observation window" },
+            "confirm": { "type": "boolean", "description": "required: posts a prompt and spends credits" }
         }), vec!["session_id", "text"]),
         tool("cue_telecom", "Read telecom countries, rates and free-phone settings.", json!({}), vec![]),
         tool("cue_sandbox", "Report a session's sandbox status, id and VNC endpoints.", json!({
             "session_id": { "type": "string" }
         }), vec!["session_id"]),
-        tool("cue_new", "Start a new session (the client generates the id).", json!({
+        tool("cue_new", "Start a new session (the client generates the id). Needs \"confirm\": true.", json!({
             "text": { "type": "string" },
-            "seconds": { "type": "integer" }
+            "seconds": { "type": "integer" },
+            "confirm": { "type": "boolean", "description": "required: creates a session and spends credits" }
         }), vec!["text"]),
         tool("cue_join", "Subscribe to a session without posting (slow tool).", json!({
             "session_id": { "type": "string" },
@@ -123,6 +126,23 @@ fn arg_num(args: &Value, key: &str) -> Option<String> {
             .map(|n| n.to_string())
             .or_else(|| v.as_str().map(|s| s.to_string()))
     })
+}
+
+/// Refuse a tool call that changes remote state unless the caller said so.
+///
+/// The CLI gate (`--confirm`) and this one are the same rule; they differ only
+/// in spelling. A machine-facing caller is not trusted more than a human one,
+/// so a tool that writes has to receive `"confirm": true` — and the value has to
+/// be the boolean, not the string "true", so an obvious scripting mistake
+/// (`"confirm": "false"`) is a rejection rather than consent.
+fn require_confirm(args: &Value, tool: &str, why: &str) -> Result<(), String> {
+    match args.get("confirm") {
+        Some(Value::Bool(true)) => Ok(()),
+        Some(other) => Err(format!(
+            "{tool} {why}; pass \"confirm\": true (found {other})"
+        )),
+        None => Err(format!("{tool} {why}; pass \"confirm\": true to call it")),
+    }
 }
 
 fn call_tool(name: &str, args: &Value) -> Result<String, String> {
@@ -175,6 +195,11 @@ fn call_tool(name: &str, args: &Value) -> Result<String, String> {
             crate::commands::rpc_with_body(Some(&method.to_string()), &body)
         }
         "cue_send" => {
+            require_confirm(
+                args,
+                "cue_send",
+                "posts a prompt to a real session and spends credits",
+            )?;
             let sid = arg_str(args, "session_id").ok_or("session_id is required")?;
             let text = arg_str(args, "text").ok_or("text is required")?;
             let mut flags = HashMap::new();
@@ -190,6 +215,7 @@ fn call_tool(name: &str, args: &Value) -> Result<String, String> {
             crate::commands::sandbox(Some(&sid.to_string()))
         }
         "cue_new" => {
+            require_confirm(args, "cue_new", "creates a real session and spends credits")?;
             let text = arg_str(args, "text").ok_or("text is required")?;
             let mut flags = HashMap::new();
             if let Some(secs) = arg_num(args, "seconds") {
@@ -379,6 +405,34 @@ mod tests {
     #[test]
     fn unknown_tool_is_an_error() {
         assert!(call_tool("nope", &json!({})).is_err());
+    }
+
+    #[test]
+    fn new_and_send_need_a_boolean_confirm() {
+        for tool in ["cue_new", "cue_send"] {
+            let err = call_tool(tool, &json!({"text": "x", "session_id": "s"})).unwrap_err();
+            assert!(err.contains("confirm"), "{tool}: {err}");
+            let err = call_tool(
+                tool,
+                &json!({"text": "x", "session_id": "s", "confirm": "false"}),
+            )
+            .unwrap_err();
+            assert!(err.contains("confirm"), "{tool} string-false: {err}");
+        }
+    }
+
+    #[test]
+    fn the_schema_advertises_confirm_where_it_is_required() {
+        let tools = tools();
+        for entry in tools.as_array().unwrap() {
+            let name = entry["name"].as_str().unwrap_or("");
+            if matches!(name, "cue_new" | "cue_send" | "cue_rpc") {
+                assert_eq!(
+                    entry["inputSchema"]["properties"]["confirm"]["type"], "boolean",
+                    "{name} must advertise confirm"
+                );
+            }
+        }
     }
 
     #[test]

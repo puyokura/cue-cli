@@ -78,6 +78,11 @@ impl Args {
                     valueless.push(rest.to_string());
                     index += 1;
                 }
+            } else if token == "-h" {
+                // Single-dash help. Without this it stays a positional, so
+                // `webdev-deploy ... -h` looked like a normal run.
+                switches.push("h".to_string());
+                index += 1;
             } else {
                 positionals.push(token.clone());
                 index += 1;
@@ -180,6 +185,13 @@ mod tests {
         assert!(args.flag("limit").is_none());
         let ok = Args::parse(&["--live".into()]);
         assert!(ok.without_value().is_empty());
+    }
+
+    #[test]
+    fn single_dash_h_is_a_switch() {
+        // `webdev-deploy ... -h` used to run the deploy: `-h` stayed a positional.
+        let args = Args::parse(&["--project".into(), "p".into(), "-h".into()]);
+        assert!(args.has("h"));
     }
 
     #[test]

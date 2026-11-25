@@ -58,7 +58,7 @@ cue doctor [--live] [--json]  # 状態・認証・接続先の点検
 cue mfa status                # 2FA の有効状態
 cue mfa totp-start            # 認証アプリ登録の開始（otpauthUri を返す）
 cue mfa totp-finish --flow <id> --code <6桁>
-cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在判定
+cue discover user.v1.UserAuthService GetMfaStatus CreateTotp --confirm  # ルート存在判定
 ```
 
 接続先は `--base`、`CUE_BASE_URL`、`CUE_WS_URL` で差し替えられる。
@@ -118,8 +118,8 @@ CI の Linux ジョブで初めて実測される）。トークンの値は標�
 
 ```
 cargo build --release          # ルートからビルドできる（ワークスペース）
-cargo test                     # 53/53 PASS（オフライン）
-python tests/run_smoke.py      # 87/87 PASS（実サービス、認証不要の範囲）
+cargo test                     # 56/56 PASS（オフライン）
+python tests/run_smoke.py      # 88/88 PASS（実サービス、認証不要の範囲）
 python tests/run_live.py       # 17 PASS / 2 SKIP / 0 FAIL（要ログイン、読み取りのみ）
 python tests/mcp_probe.py      # 遅いツールが読み取りループを塞がないこと
 python tests/check_docs.py     # 文書に書いた件数がファイルと一致すること
@@ -153,6 +153,8 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+
 
 
 

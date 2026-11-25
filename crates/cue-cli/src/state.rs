@@ -90,6 +90,22 @@ impl StatePaths {
     }
 }
 
+/// Whether a state variable was set to an empty value.
+///
+/// An empty value used to be skipped silently, which put the state in the OS
+/// default directory while the caller believed they had redirected it. A set-but
+/// empty variable is a mistake worth reporting, not a request for the default.
+pub fn empty_env_var() -> Option<String> {
+    for name in ["CUE_STATE", "CUE_MCP_STATE"] {
+        if let Ok(value) = std::env::var(name) {
+            if value.trim().is_empty() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn first_env(names: &[&str]) -> Option<String> {
     for name in names {
         if let Ok(value) = std::env::var(name) {
