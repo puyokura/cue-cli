@@ -107,10 +107,11 @@ JSON INPUT
   non-ASCII becomes '?' on the way into a pipe. Use --set or --json-file there.
 
 DESTRUCTIVE OPERATIONS
-  Every command that can change remote state requires --confirm: webdev-deploy,
-  new, send, discover, `mfa` (enable/disable/totp/passkey/codes),
-  `phone reset`, and any `rpc`/`raw` whose method is not one of the read prefixes
-  (Get/List/Search/Page/Check/Query/View/Read/User) or is a credential minter.
+  Every command that can change remote state requires --confirm: login,
+  webdev-deploy, new, send, discover, all `phone` subcommands, `mfa`
+  enable/disable/totp/passkey/codes, and any `rpc`/`raw` whose method is not one
+  of the read prefixes (Get/List/Search/Page/Check/Query/View/Read/User) or is a
+  credential minter.
 
   --confirm takes no value and must be the last argument. `--confirm false`,
   an empty value, or an unset-variable expansion are refused: only the bare
@@ -174,7 +175,7 @@ fn is_known_command(name: &str) -> bool {
 /// Flags each command reads, beyond `GLOBAL_FLAGS`.
 fn known_flags(command: &str) -> &'static [&'static str] {
     match command {
-        "login" => &["token", "base"],
+        "login" => &["token", "base", "confirm"],
         "phone" => &["number", "purpose", "id", "code", "password", "confirm"],
         "mfa" => &["flow", "code", "credential", "name", "id", "confirm"],
         "status" => &["json"],
@@ -450,41 +451,59 @@ fn legacy_flags(args: &cli::Args) -> HashMap<String, String> {
 
 fn status_output(args: &cli::Args) -> String {
     let value = doctor::status();
+    // A broken state path is the answer to "why is this not working", so it has
+    // to be visible in text mode and has to set the exit code; otherwise a
+    // caller sees a tidy report and assumes the CLI is healthy.
+    let state_error = value
+        .get("state_error")
+        .and_then(Value::as_str)
+        .map(str::to_string);
     if args.has("json") {
-        pretty(&value)
-    } else {
-        let signed_in = value
-            .get("signed_in")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let state_path = value
-            .get("state_path")
-            .and_then(Value::as_str)
-            .unwrap_or("-");
-        let base = value.get("base").and_then(Value::as_str).unwrap_or("-");
-        let identity = value.get("identity_check").cloned().unwrap_or(Value::Null);
-        let ok = identity.get("ok").and_then(Value::as_bool).unwrap_or(false);
-        let mut out = String::new();
-        out.push_str(&format!("state_path: {state_path}\n"));
-        out.push_str(&format!("base:       {base}\n"));
-        out.push_str(&format!(
-            "signed_in:  {signed_in} ({})\n",
-            if signed_in {
-                "a token is stored; this does not prove it is accepted"
-            } else {
-                "no token; run `cue login`"
-            }
-        ));
-        out.push_str(&format!(
-            "identity:   {}\n",
-            if ok {
-                "token accepted by the service"
-            } else {
-                "token not verified"
-            }
-        ));
-        out
+        if state_error.is_some() {
+            println!("{}", pretty(&value));
+            std::process::exit(1);
+        }
+        return pretty(&value);
     }
+    let signed_in = value
+        .get("signed_in")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let state_path = value
+        .get("state_path")
+        .and_then(Value::as_str)
+        .unwrap_or("-");
+    let base = value.get("base").and_then(Value::as_str).unwrap_or("-");
+    let identity = value.get("identity_check").cloned().unwrap_or(Value::Null);
+    let ok = identity.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    let mut out = String::new();
+    if let Some(err) = state_error {
+        // First line, because it invalidates everything below it.
+        out.push_str(&format!("state_error: {err}\n"));
+    }
+    out.push_str(&format!("state_path: {state_path}\n"));
+    out.push_str(&format!("base:       {base}\n"));
+    out.push_str(&format!(
+        "signed_in:  {signed_in} ({})\n",
+        if signed_in {
+            "a token is stored; this does not prove it is accepted"
+        } else {
+            "no token; run `cue login`"
+        }
+    ));
+    out.push_str(&format!(
+        "identity:   {}\n",
+        if ok {
+            "token accepted by the service"
+        } else {
+            "token not verified"
+        }
+    ));
+    if out.starts_with("state_error") {
+        println!("{out}");
+        std::process::exit(1);
+    }
+    out
 }
 
 fn doctor_output(args: &cli::Args) -> String {

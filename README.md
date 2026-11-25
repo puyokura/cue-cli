@@ -29,7 +29,7 @@ Cue の API を独立クライアントから扱うための解析成果物と C
 cargo build --release
 
 # ログインは 1 プロセスで完結する（引数なしで対話入力）
-target/release/cue login
+target/release/cue login --confirm
 #   phone number (E.164, e.g. +819012345678): <番号を入力>
 #   SMS code: <届いた 6 桁を入力>
 #   -> トークンを検証してから保存し、user を表示する
@@ -40,24 +40,24 @@ cue rpc user.v1.UserPublicService/GetExchangeInfo
 cue raw user.v1.UserPublicService/CheckRegion   # proto コーデック
 cue watch --seconds 10        # Socket.IO を開いてフレームを観測
 
-cue phone start --number +8190...   # SMS コード送信（verificationId を返す）
-cue phone verify --id <v> --code <c>  # コードでログインしトークンを保存
-cue phone password --number +8190...  # パスワードでログイン（stdin から読む）
+cue phone start --number +8190... --confirm   # SMS コード送信（verificationId を返す）
+cue phone verify --id <v> --code <c> --confirm  # コードでログインしトークンを保存
+cue phone password --number +8190... --confirm  # パスワードでログイン（stdin から読む）
 
 cue whoami
 cue sessions --limit 20
-cue new --text "やあ"         # 新規セッション（ID はクライアントが生成）
+cue new --text "やあ" --confirm         # 新規セッション（ID はクライアントが生成）
 cue sandbox <session_id>      # 沙箱の状態と VNC/WebRTC の URL（読み取り専用）
 cue telecom                   # 対応国・通話レート・無料電話設定（読み取り専用）
 cue webdev [--limit n]        # WebDev プロジェクト一覧（読み取り専用）
 cue webdev --detail <id>      # チェックポイント（versionId）を含む詳細
-cue webdev-deploy --project <id> --version <vid>   # 公開ドメインへデプロイ（外部公開）
-cue send <session_id> --text "やあ"   # 既存セッションに join_session + user_message
+cue webdev-deploy --project <id> --version <vid> --confirm   # 公開ドメインへデプロイ（外部公開）
+cue send <session_id> --text "やあ" --confirm   # 既存セッションに join_session + user_message
 cue status                    # この CLI が認識している状態（--json 可）
 cue doctor [--live] [--json]  # 状態・認証・接続先の点検
 cue mfa status                # 2FA の有効状態
-cue mfa totp-start            # 認証アプリ登録の開始（otpauthUri を返す）
-cue mfa totp-finish --flow <id> --code <6桁>
+cue mfa totp-start --confirm  # 認証アプリ登録の開始（otpauthUri を返す）
+cue mfa totp-finish --flow <id> --code <6桁> --confirm
 cue discover user.v1.UserAuthService GetMfaStatus CreateTotp --confirm  # ルート存在判定
 ```
 
@@ -120,7 +120,7 @@ CI の Linux ジョブで初めて実測される）。トークンの値は標�
 ```
 cargo build --release          # ルートからビルドできる（ワークスペース）
 cargo test                     # 58/58 PASS（オフライン）
-python tests/run_smoke.py      # 93/93 PASS（実サービス、認証不要の範囲）
+python tests/run_smoke.py      # 94/94 PASS（実サービス、認証不要の範囲）
 python tests/run_live.py       # 17 PASS / 2 SKIP / 0 FAIL（要ログイン、読み取りのみ）
 python tests/mcp_probe.py      # 遅いツールが読み取りループを塞がないこと
 python tests/check_docs.py     # 文書に書いた件数がファイルと一致すること
@@ -141,7 +141,7 @@ macOS aarch64 の 3 バイナリをビルドして同じタグに添付する。
 クロスビルドした成果物を「テスト済み」とは書かない。チェックサムは別添しない（ホスティング側が
 各資産の digest を表示する）。
 
-タグ作成と公開は依頼があって初めて行う。このリポジトリはまだタグを持っていない。
+タグ作成と公開は依頼があって初めて行う。`v0.1.0` は公開済み。
 
 ## ライセンス
 
@@ -154,6 +154,10 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+
+
+
 
 
 

@@ -159,10 +159,20 @@ pub fn is_destructive_command(command: &str, args: &crate::cli::Args) -> bool {
             )
         }
         "phone" => {
-            // `reset` sets a new account password. `start`/`verify`/`password`
-            // are in the login flow, where confirmation is redundant.
-            args.positional(0).unwrap_or("") == "reset"
+            // Every phone subcommand sends a state-changing POST: `start` and
+            // `reset` send an SMS, `verify` and `password` exchange a code or a
+            // password for a session, `reset` sets a new password. The login
+            // flow is not exempt, because "it is only logging in" is how a
+            // forgotten `--confirm` becomes an accidental account action.
+            matches!(
+                args.positional(0).unwrap_or(""),
+                "start" | "verify" | "password" | "reset"
+            )
         }
+        // `login` writes a credential: `--token` stores one directly, and the
+        // interactive form posts to the phone flow and stores the token it
+        // receives. Both are gated.
+        "login" => true,
         "rpc" => state_changing_method(args.positional(0).unwrap_or("")),
         "raw" => state_changing_method(args.positional(0).unwrap_or("")),
         // `discover` POSTs method names the caller supplies. Today the server
@@ -324,8 +334,12 @@ mod tests {
         assert!(is_destructive_command("mfa", &args_of(&["codes"])));
         // Resetting the account password is a state change.
         assert!(is_destructive_command("phone", &args_of(&["reset"])));
-        assert!(!is_destructive_command("phone", &args_of(&["start"])));
-        assert!(!is_destructive_command("phone", &args_of(&["verify"])));
+        // Every phone subcommand writes: start/reset send an SMS, verify and
+        // password exchange a credential for a session.
+        assert!(is_destructive_command("phone", &args_of(&["start"])));
+        assert!(is_destructive_command("phone", &args_of(&["verify"])));
+        assert!(is_destructive_command("phone", &args_of(&["password"])));
+        assert!(is_destructive_command("phone", &args_of(&["reset"])));
         assert!(!is_destructive_command("mfa", &args_of(&["status"])));
     }
 

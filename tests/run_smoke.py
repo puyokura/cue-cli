@@ -102,7 +102,7 @@ def main():
     check("whoami reports missing token", "no token" in err, err)
 
     # 6. bogus token must not be persisted
-    rc, out, err = run(["login", "--token", "bogus-smoke"], env_extra=env)
+    rc, out, err = run(["login", "--token", "bogus-smoke", "--confirm"], env_extra=env)
     check("login with bogus token exits non-zero", rc != 0, out)
     check("login reports rejection", "rejected" in err or "401" in err, err)
     tok = os.path.join(tmp, "cue-cli", "token")
@@ -151,7 +151,7 @@ def main():
     check("phone gate is not closed (no 400232)", "400232" not in err, err)
 
     # 12. phone subcommands refuse to run without their required flags
-    rc, out, err = run(["phone", "start"], env_extra=env)
+    rc, out, err = run(["phone", "start", "--confirm"], env_extra=env)
     check("phone start without --number fails", rc != 0, out)
     check("phone start names the missing flag", "--number" in err, err)
 
@@ -358,6 +358,8 @@ def main():
     # 15. interactive `login` must not hang or send an SMS when given no input.
     #     It reads the phone number from stdin; EOF has to fail fast instead.
     rc, out, err = run(["login"], env_extra=env, stdin_data="")
+    check("interactive login needs --confirm", rc == 2 and "--confirm" in err, err[:120])
+    rc, out, err = run(["login", "--confirm"], env_extra=env, stdin_data="")
     check("interactive login fails without input", rc != 0, out)
     check("interactive login names the missing number", "phone number" in err, err)
     check("interactive login never claims an SMS was sent", "SMS sent" not in err, err)
@@ -370,6 +372,8 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
 
 
 
