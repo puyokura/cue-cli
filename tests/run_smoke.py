@@ -141,7 +141,7 @@ def main():
     #     the header, so this asserts the CLI's behaviour, not the server's.
     rc, out, err = run(
         ["rpc", "user.v1.UserAuthPublicService/SendCuePhoneCode",
-         "--json", '{"phoneNumber":"+","purpose":1}'],
+         "--json", '{"phoneNumber":"+","purpose":1}', "--confirm"],
         env_extra=env,
     )
     check("phone code call reaches validation", rc != 0, out)
@@ -188,7 +188,7 @@ def main():
     # 15a. server errors must carry the service's own reason, not only Error<NNNN>.
     #      Uses a token-free call so the check is independent of a stored login.
     rc, out, err = run(
-        ["rpc", "user.v1.UserAuthPublicService/Oauth2Authorize", "--json", '{"type":5}'],
+        ["rpc", "user.v1.UserAuthPublicService/Oauth2Authorize", "--json", '{"type":5}', "--confirm"],
         env_extra=env,
     )
     check("server error surfaces its message", "Facebook login has been discontinued" in err,
@@ -260,6 +260,44 @@ def main():
         check(f"no token leak: {cmd[0]}", sentinel not in out and sentinel not in err,
               (out + err)[:120])
 
+    # 17. doctor / status, and the MCP surface Muse parity requires.
+    #     This harness runs with an empty state dir, so doctor must fail loudly:
+    #     a doctor that reports "fail" and exits 0 is unreadable to a script.
+    rc, out, err = run(["doctor"], env_extra=env)
+    check("doctor reports a failure with no token", rc == 1, f"rc={rc} {err[:80]}")
+    check("doctor skips the gateway when not live", "not checked (pass --live)" in out, out[:200])
+    rc, out, json_text = run(["doctor", "--live", "--json"], env_extra=env)
+    check("doctor --json exits non-zero when a check fails", rc == 1, f"rc={rc}")
+    try:
+        doc = json.loads(json_text or out)
+        check("doctor --json parses", isinstance(doc.get("checks"), list), (json_text or out)[:160])
+        check("doctor --json reports a verdict", "failed" in doc, "")
+        check("doctor --json agrees with the exit code", doc.get("failed") is True, "")
+    except (json.JSONDecodeError, AttributeError):
+        check("doctor --json parses", False, (json_text or out)[:160])
+    rc, out, err = run(["status", "--json"], env_extra=env)
+    try:
+        st = json.loads(out)
+        check("status --json has state_path", "state_path" in st, out[:160])
+        check("status --json has signed_in", "signed_in" in st, "")
+    except json.JSONDecodeError:
+        check("status --json parses", False, out[:160])
+
+    # 17b. a destructive command refuses to run without --confirm
+    rc, out, err = run(["webdev-deploy", "--project", "x", "--version", "y"], env_extra=env)
+    check("destructive command needs --confirm", rc == 2, f"rc={rc}")
+    check("the confirm prompt names the command", "--confirm" in err, err[:160])
+    rc, out, err = run(["webdev-deploy"], env_extra=env)
+    check("missing arguments are reported first", "--project" in err, err[:160])
+
+    # 17c. --json-file and --set both reach the request builder
+    body_file = os.path.join(tempfile.mkdtemp(prefix="cue-body-"), "b.json")
+    with open(body_file, "w", encoding="utf-8") as fh:
+        fh.write("{}")
+    rc, out, err = run(["rpc", "user.v1.UserPublicService/GetGlobalSettings", "--json-file", body_file],
+                       env_extra=env)
+    check("--json-file is accepted", rc == 0, err[:160])
+
     # 15c. unknown flags must be rejected, and version must work
     rc, out, err = run(["whoami", "--bogus"], env_extra=env)
     check("unknown flag is rejected", rc == 2, f"rc={rc}")
@@ -294,6 +332,10 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
 
 
 

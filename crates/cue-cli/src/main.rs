@@ -1,28 +1,34 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Cue CLI — independent client for the Cue (ai.manus.agents) service.
+//! Cue CLI — independent client for the Cue service.
 //!
 //! Wire protocol facts are taken from the shipped Android client and confirmed
-//! by live probes of api.manus.im (see docs/protocol.md):
+//! by live probes (see docs/protocol.md):
 //!   * Connect RPC over POST /<package>.<Service>/<Method>
 //!   * `connect-protocol-version: 1`
 //!   * unary JSON (`application/json`) and unary proto (`application/proto`)
-//!   * `authorization: Bearer <token>` where token is a service-issued bearer
-//!     token (the native login flows issue it; see docs/auth-status.md)
+//!   * `authorization: Bearer <token>` where the token is service-issued
 
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+mod body;
 mod chat;
-mod mcp;
+mod cli;
 mod client;
 mod commands;
+mod doctor;
+mod mcp;
 mod phone;
 mod session;
 mod socket;
+mod state;
+
+/// Flags every command accepts.
+const GLOBAL_FLAGS: &[&str] = &["state", "help"];
 
 /// Print usage and exit 0 (explicit help request).
 fn usage_ok() -> ! {
@@ -40,171 +46,242 @@ fn usage_body() {
     eprintln!(
         "cue {version}
 
-USAGE:
-  cue <command> [args]
+USAGE
+  cue <command> [subcommand] [args] [--flags]
 
-Commands:
-  login [--token <t>] [--base <url>]  no --token: interactive phone+SMS login
+ACCOUNT AND SESSION
+  login [--token <t>] [--base <url>]   no --token: interactive phone+SMS login
+  logout                               remove the stored token
+  whoami                               user.v1.UserService/UserInfo
+  status [--json]                      what this CLI thinks its state is
+  doctor [--live] [--json]             check state, auth, and the service
+  settings                             public settings (no auth)
+  region                               region hints (no auth)
+
+PHONE AND TWO-STEP VERIFICATION
   phone start --number <n> [--purpose login|reset_password]
-                                     send an SMS code; prints the verification id
-  phone verify --id <v> --code <c>   exchange the SMS code for a session token
-  phone password --number <n>       log in with a phone number and password
-                                     (password is read from stdin when omitted)
-  phone reset --id <v> --code <c>    set a new password (read from stdin)
-  mfa <status|totp-start|totp-finish|enable|disable|codes|login-methods|passkeys|passkey-start|passkey-finish|passkey-delete>
-                                     two-step verification management (needs a token)
-  logout                              remove stored token
-  whoami                              user.v1.UserService/UserInfo
-  settings                            user.v1.UserPublicService/GetGlobalSettings (no auth)
-  region                              user.v1.UserPublicService/CheckRegion (no auth)
-  sessions [--limit n]                session.v1.SessionService/ListSessions
-  session <session_uid>               session.v1.SessionService/GetSession
-  agents [--limit n]                  agents.v1.AgentsService/ListAgentsV2
-  rpc <service.Method> [--json <b>]   call any Connect RPC by path
-  raw <service.Method> [--bytes <hex>] call any Connect RPC over proto
-  watch [--seconds n] [--frames n]    Socket.IO session: observe frames
-  send <session_id> --text <prompt>   join an existing session and post a prompt
-  new --text <prompt>                 start a new session (id is generated locally)
-  sandbox <session_id>                report the sandbox state for a session (read-only)
-  telecom                             read telecom countries, rates, settings (read-only)
-  webdev [--limit n] [--detail <id>]  list WebDev projects or read one (read-only)
-  webdev-deploy --project <id> --version <id>
-                                      publish a WebDev project to its public domain
-  join <session_id> [--seconds n]     subscribe to a session without posting
-  methods                             print the static RPC inventory path
-  discover <service> <method>...      probe whether Connect routes exist (404/401 oracle)
-  coverage                            read-only survey of the authenticated surface
+  phone verify --id <v> --code <c>     exchange the SMS code for a token
+  phone password --number <n>          log in with a password (stdin when omitted)
+  phone reset --id <v> --code <c>      set a new password (stdin)
+  mfa <status|totp-start|totp-finish|enable|disable|codes|login-methods>
+  mfa <passkeys|passkey-start|passkey-finish|passkey-delete>
+
+CHAT AND SESSIONS
+  sessions [--limit n]                 list sessions
+  session <session_uid>                read one session
+  new --text <prompt>                  start a session (the id is generated here)
+  send <session_id> --text <prompt>    post a prompt to an existing session
+  join <session_id> [--seconds n]      subscribe without posting
+  watch [--seconds n] [--frames n]     observe the Socket.IO stream
+  agents [--limit n]                   list agents
+  sandbox <session_id>                 sandbox state and VNC endpoints (read-only)
+
+WORKSPACE AND TELEPHONY
+  webdev [--limit n] [--detail <id>]   list or read WebDev projects (read-only)
+  webdev-deploy --project <id> --version <id> [--confirm]
+                                       publish a project to its public domain
+  telecom                              countries, rates, free-phone settings
+
+LOW LEVEL
+  rpc <Service.Method> [--set k=v ...] [--json FILE|-] [--confirm]
+                                       call any Connect RPC with a JSON body
+  raw <Service.Method> [--bytes <hex>] [--confirm]
+                                       call any Connect RPC over the proto codec
+  discover <service> <method>...       probe whether Connect routes exist
+  coverage                             read-only survey of the authenticated surface
+  methods                              print the static RPC inventory path
   version                              print the version
-  mcp                                  serve MCP over stdio (initialize/tools/list/tools/call)
+  mcp                                  serve MCP over stdio
+
+JSON INPUT
+  --set key=value        First choice: no quote characters, so no shell can mangle
+                         it. Repeatable. true/false/null and integers are typed;
+                         a,b,c becomes an array.
+  --json-file PATH       Second choice: exact bytes from a file (UTF-8).
+  --json JSON            Only when the shell preserves quotes (bash, cmd).
+  --json -               Read UTF-8 JSON from stdin.
+
+  Windows PowerShell 5.1 strips double quotes even inside single quotes before a
+  native process sees the argument, and defaults $OutputEncoding to us-ascii, so
+  non-ASCII becomes '?' on the way into a pipe. Use --set or --json-file there.
+
+DESTRUCTIVE OPERATIONS
+  Commands that can change remote state require --confirm:
+  webdev-deploy, `mfa disable`, `mfa passkey-delete`, and an `rpc` or `raw`
+  whose method or body names a delete/update/create/deploy-style operation.
+
+GLOBAL
+  --state PATH   State file or directory. A directory holds `token` and `base`;
+                 a file is the token itself and its base lives beside it.
+
+ENVIRONMENT
+  CUE_STATE / CUE_MCP_STATE   Override the state path (either spelling wins
+                              over the OS default; `--state` wins over both)
+  CUE_BASE_URL                Override the service origin
+  CUE_WS_URL                  Override the Socket.IO origin
 ",
         version = env!("CARGO_PKG_VERSION")
     );
 }
 
+/// Flags each command reads, beyond `GLOBAL_FLAGS`.
+fn known_flags(command: &str) -> &'static [&'static str] {
+    match command {
+        "login" => &["token", "base"],
+        "phone" => &["number", "purpose", "id", "code", "password", "confirm"],
+        "mfa" => &["flow", "code", "credential", "name", "id", "confirm"],
+        "status" => &["json"],
+        "doctor" => &["live", "json"],
+        "sessions" | "agents" => &["limit"],
+        "webdev" => &["limit", "detail"],
+        "webdev-deploy" => &["project", "version", "confirm"],
+        "join" => &["seconds", "frames", "locale", "verbose"],
+        "new" => &[
+            "text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
+            "country-iso", "verbose",
+        ],
+        "send" => &[
+            "text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
+            "country-iso", "verbose",
+        ],
+        "watch" => &["seconds", "frames", "locale"],
+        "rpc" => &["set", "json", "json-file", "confirm"],
+        "methods" => &["list"],
+        "raw" => &["bytes", "confirm"],
+        _ => &[],
+    }
+}
+
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
-    if args.is_empty() {
+    let raw: Vec<String> = env::args().skip(1).collect();
+    if raw.is_empty() {
         usage();
     }
 
-    // Global flags may precede the command (`cue --state DIR --version`).
-    let mut flags: HashMap<String, String> = HashMap::new();
-    let mut i = 0;
-    while i < args.len() {
-        let a = &args[i];
-        match a.strip_prefix("--") {
-            Some(name) if name == "state" && i + 1 < args.len() && !args[i + 1].starts_with("--") => {
-                flags.insert("state".to_string(), args[i + 1].clone());
-                i += 2;
+    // Global flags may precede the command (`--state DIR status`,
+    // `--state=DIR status`). The `=` form has to be handled here as well: after
+    // the command the parser splits it, before the command this loop is the
+    // parser, and the two positions must not disagree.
+    let mut prefix: Vec<String> = Vec::new();
+    let mut index = 0usize;
+    while index < raw.len() {
+        let token = raw[index].clone();
+        if let Some(value) = token.strip_prefix("--state=") {
+            prefix.push("--state".to_string());
+            prefix.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        match token.as_str() {
+            "--version" | "-V" => {
+                println!("cue {}", env!("CARGO_PKG_VERSION"));
+                return;
             }
-            Some(name) if name == "version" => {
-                flags.insert("version".to_string(), "true".to_string());
-                i += 1;
+            "--help" | "-h" => {
+                usage_ok();
+            }
+            "--state" if index + 1 < raw.len() => {
+                prefix.push("--state".to_string());
+                prefix.push(raw[index + 1].clone());
+                index += 2;
             }
             _ => break,
         }
     }
-    let remaining = &args[i..];
+
+    let remaining = &raw[index..];
     if remaining.is_empty() {
-        if flags.contains_key("version") {
-            println!("cue {}", env!("CARGO_PKG_VERSION"));
-            return;
-        }
         usage();
     }
-    let cmd = remaining[0].as_str();
-    let rest = &remaining[1..];
+    let command = remaining[0].clone();
+    let rest: Vec<String> = prefix.into_iter().chain(remaining[1..].to_vec()).collect();
+    let args = cli::Args::parse(&rest);
 
-    let mut positional: Vec<String> = Vec::new();
-    let mut j = 0;
-    while j < rest.len() {
-        let a = &rest[j];
-        if let Some(name) = a.strip_prefix("--") {
-            if j + 1 < rest.len() && !rest[j + 1].starts_with("--") {
-                flags.insert(name.to_string(), rest[j + 1].clone());
-                j += 2;
-            } else {
-                flags.insert(name.to_string(), "true".to_string());
-                j += 1;
-            }
-        } else {
-            positional.push(a.clone());
-            j += 1;
-        }
-    }
-
-    // `--state` redirects the state directory before anything reads it.
-    if let Some(dir) = flags.get("state") {
+    // `--state` redirects the state path before anything reads it.
+    if let Some(path) = args.flag("state") {
         // Safety: this runs before any other thread exists.
-        std::env::set_var("CUE_STATE", dir);
+        env::set_var("CUE_STATE", path);
     }
 
-    // Reject flags a command does not implement: silently ignoring them makes a
-    // mistyped option look accepted.
-    let allowed: &[&str] = match cmd {
-        "login" => &["token", "base", "state"],
-        "phone" => &["number", "purpose", "id", "code", "password", "state"],
-        "mfa" => &["flow", "code", "credential", "name", "id", "state"],
-        "join" => &["seconds", "frames", "locale", "verbose", "state"],
-        "telecom" => &["state"],
-        "webdev" => &["limit", "detail", "state"],
-        "webdev-deploy" => &["project", "version", "state"],
-        "sandbox" => &["state"],
-        "new" => &["text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
-                  "country-iso", "verbose", "state"],
-        "send" => &["text", "seconds", "frames", "task-mode", "delivery-mode", "locale",
-                    "country-iso", "verbose", "state"],
-        "watch" => &["seconds", "frames", "locale", "state"],
-        "sessions" | "agents" => &["limit", "state"],
-        "rpc" => &["json", "state"],
-        "raw" => &["bytes", "state"],
-        _ => &["state"],
-    };
-    if !allowed.is_empty() {
-        for name in flags.keys() {
-            if !allowed.contains(&name.as_str()) {
-                eprintln!("error: unknown flag --{name} for `cue {cmd}`");
-                eprintln!("allowed: {}", allowed.iter().map(|f| format!("--{f}")).collect::<Vec<_>>().join(", "));
-                std::process::exit(2);
-            }
-        }
+    if let Err(err) = body::reject_unknown_flags(
+        &command,
+        &args,
+        GLOBAL_FLAGS,
+        known_flags(&command),
+        body::command_booleans(&command),
+    ) {
+        eprintln!("error: {err}");
+        std::process::exit(2);
     }
 
-    let result = match cmd {
-        "login" => commands::login(flags.get("token"), flags.get("base")),
-        "phone" => commands::phone(positional.first(), &flags),
-        "mfa" => commands::mfa(positional.first(), &flags),
+    // A command that can change remote state has to say so. Argument validation
+    // runs first, so `webdev-deploy` with no --project reports the missing
+    // argument instead of asking for --confirm on a call that cannot start.
+    if let Err(err) = require_arguments(&command, &args) {
+        eprintln!("error: {err}");
+        std::process::exit(2);
+    }
+    if body::is_destructive_command(&command, &args) && !args.has("confirm") {
+        eprintln!("error: `cue {command}` can change remote state; add --confirm");
+        std::process::exit(2);
+    }
+
+    let flags = legacy_flags(&args);
+
+    let result = match command.as_str() {
+        "login" => commands::login(args.flag("token").map(str::to_string).as_ref(), args.flag("base").map(str::to_string).as_ref()),
+        "phone" => commands::phone(args.positional(0).map(str::to_string).as_ref(), &flags),
+        "mfa" => commands::mfa(args.positional(0).map(str::to_string).as_ref(), &flags),
         "logout" => commands::logout(),
         "whoami" => commands::whoami(),
+        "status" => Ok(status_output(&args)),
+        "doctor" => Ok(doctor_output(&args)),
         "settings" => commands::settings(),
         "region" => commands::region(),
-        "sessions" => commands::sessions(flags.get("limit")),
-        "session" => commands::session(positional.first()),
-        "agents" => commands::agents(flags.get("limit")),
-        "rpc" => commands::rpc(positional.first(), flags.get("json")),
-        "raw" => commands::raw(positional.first(), flags.get("bytes")),
-        "watch" => commands::watch(flags.get("seconds"), flags.get("frames"), flags.get("locale")),
-        "send" => commands::send(positional.first(), flags.get("text"), &flags),
-        "new" => commands::new_session(flags.get("text"), &flags),
-        "sandbox" => commands::sandbox(positional.first()),
+        "sessions" => commands::sessions(args.flag("limit").map(str::to_string).as_ref()),
+        "session" => commands::session(args.positional(0).map(str::to_string).as_ref()),
+        "agents" => commands::agents(args.flag("limit").map(str::to_string).as_ref()),
+        "rpc" => commands::rpc(args.positional(0).map(str::to_string).as_ref(), &args),
+        "raw" => commands::raw(
+            args.positional(0).map(str::to_string).as_ref(),
+            args.flag("bytes").map(str::to_string).as_ref(),
+        ),
+        "watch" => commands::watch(
+            args.flag("seconds").map(str::to_string).as_ref(),
+            args.flag("frames").map(str::to_string).as_ref(),
+            args.flag("locale").map(str::to_string).as_ref(),
+        ),
+        "send" => commands::send(args.positional(0).map(str::to_string).as_ref(), args.flag("text").map(str::to_string).as_ref(), &flags),
+        "new" => commands::new_session(args.flag("text").map(str::to_string).as_ref(), &flags),
+        "sandbox" => commands::sandbox(args.positional(0).map(str::to_string).as_ref()),
         "telecom" => commands::telecom(),
         "webdev" => {
-            if let Some(pid) = flags.get("detail") {
-                commands::webdev_detail(Some(pid))
+            if let Some(pid) = args.flag("detail") {
+                commands::webdev_detail(Some(&pid.to_string()))
             } else {
-                commands::webdev(flags.get("limit"))
+                commands::webdev(args.flag("limit").map(str::to_string).as_ref())
+            }
+        }
+        "webdev-deploy" => commands::webdev_deploy(
+            args.flag("project").map(str::to_string).as_ref(),
+            args.flag("version").map(str::to_string).as_ref(),
+        ),
+        "join" => commands::join(args.positional(0).map(str::to_string).as_ref(), &flags),
+        "discover" => {
+            let methods: Vec<String> = args.positionals.iter().skip(1).cloned().collect();
+            commands::discover(args.positional(0).map(str::to_string).as_ref(), &methods)
+        }
+        "coverage" => commands::coverage(),
+        "methods" => {
+            if args.has("list") {
+                commands::methods_list()
+            } else {
+                commands::methods()
             }
         },
-        "webdev-deploy" => commands::webdev_deploy(flags.get("project"), flags.get("version")),
-        "join" => commands::join(positional.first(), &flags),
-        "discover" => commands::discover(positional.first(), &positional[1..].to_vec()),
-        "coverage" => commands::coverage(),
-        "methods" => commands::methods(),
-        "version" | "--version" | "-V" => Ok(format!("cue {}", env!("CARGO_PKG_VERSION"))),
+        "version" => Ok(format!("cue {}", env!("CARGO_PKG_VERSION"))),
         "mcp" => mcp::serve(),
-        "--help" | "-h" | "help" => {
-            usage_ok();
-        }
+        "--help" | "-h" | "help" => usage_ok(),
         other => {
             eprintln!("unknown command: {other}");
             usage();
@@ -224,33 +301,110 @@ fn main() {
     }
 }
 
-/// Directory that holds CLI state. Created on demand by `login`.
+/// Arguments that must be present before any work starts.
 ///
-/// Overrides, in order: `CUE_STATE` (directory), then `--state` handled by the
-/// caller; otherwise the OS config directory.
-pub fn state_dir() -> Result<PathBuf, String> {
-    if let Some(dir) = env::var_os("CUE_STATE") {
-        let dir = PathBuf::from(dir);
-        fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-        restrict(&dir)?;
-        return Ok(dir);
-    }
-    let base = if cfg!(windows) {
-        env::var_os("APPDATA").map(PathBuf::from)
-    } else {
-        env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+/// A missing required argument is a usage error, not a runtime failure, so it
+/// exits 2 and never reaches the network or the confirm gate.
+fn require_arguments(command: &str, args: &cli::Args) -> Result<(), String> {
+    let required: &[(&str, &str)] = match command {
+        "webdev-deploy" => &[
+            ("project", "--project <projectId>"),
+            ("version", "--version <versionId>"),
+        ],
+        "send" | "new" => &[("text", "--text <prompt>")],
+        _ => &[],
     };
-    let base = base.ok_or("cannot locate a config directory (set APPDATA, XDG_CONFIG_HOME or CUE_STATE)")?;
-    let dir = base.join("cue-cli");
-    fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-    restrict(&dir)?;
-    Ok(dir)
+    for (flag, usage) in required {
+        if args.flag(flag).is_none() {
+            return Err(format!("`cue {command}` requires {usage}"));
+        }
+    }
+    Ok(())
+}
+
+fn legacy_flags(args: &cli::Args) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for name in args.supplied() {
+        if name == "set" || name == "confirm" {
+            continue;
+        }
+        if let Some(value) = args.flag(&name) {
+            map.insert(name.clone(), value.to_string());
+        } else {
+            map.insert(name, "true".to_string());
+        }
+    }
+    map
+}
+
+fn status_output(args: &cli::Args) -> String {
+    let value = doctor::status();
+    if args.has("json") {
+        pretty(&value)
+    } else {
+        let signed_in = value.get("signed_in").and_then(Value::as_bool).unwrap_or(false);
+        let state_path = value
+            .get("state_path")
+            .and_then(Value::as_str)
+            .unwrap_or("-");
+        let base = value.get("base").and_then(Value::as_str).unwrap_or("-");
+        let identity = value
+            .get("identity_check")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let ok = identity.get("ok").and_then(Value::as_bool).unwrap_or(false);
+        let mut out = String::new();
+        out.push_str(&format!("state_path: {state_path}\n"));
+        out.push_str(&format!("base:       {base}\n"));
+        out.push_str(&format!(
+            "signed_in:  {signed_in} (a token is stored; this does not prove it is accepted)\n"
+        ));
+        out.push_str(&format!(
+            "identity:   {}\n",
+            if ok {
+                "token accepted by the service"
+            } else {
+                "token not verified"
+            }
+        ));
+        out
+    }
+}
+
+fn doctor_output(args: &cli::Args) -> String {
+    let live = args.has("live");
+    let report = doctor::run(live);
+    // A doctor a script cannot read is half a doctor: exit non-zero when any
+    // check failed, the same way the Muse baseline does.
+    if report.failed() {
+        if args.has("json") {
+            println!("{}", pretty(&report.to_json(live)));
+        } else {
+            print!("{}", report.to_text(live));
+        }
+        std::process::exit(1);
+    }
+    if args.has("json") {
+        pretty(&report.to_json(live))
+    } else {
+        report.to_text(live)
+    }
+}
+
+/// Create and tighten the state directory.
+pub fn state_dir() -> Result<PathBuf, String> {
+    let paths = state::StatePaths::resolve()?;
+    paths.ensure()?;
+    Ok(paths.dir)
+}
+
+/// Resolved state paths without creating anything.
+pub fn state_paths() -> Result<state::StatePaths, String> {
+    state::StatePaths::resolve()
 }
 
 /// Tighten permissions on Unix: directory 0700, files 0600. A no-op elsewhere.
-fn restrict(path: &std::path::Path) -> Result<(), String> {
+pub(crate) fn restrict_path(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -264,12 +418,12 @@ fn restrict(path: &std::path::Path) -> Result<(), String> {
 
 /// Write a state file atomically with restrictive permissions.
 /// A partially written token file would be worse than none.
-pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String> {
+pub fn write_state(path: &Path, contents: &str) -> Result<(), String> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, contents).map_err(|e| format!("write {}: {e}", tmp.display()))?;
-    restrict(&tmp)?;
+    restrict_path(&tmp)?;
     fs::rename(&tmp, path).map_err(|e| format!("rename {}: {e}", path.display()))?;
-    restrict(path)?;
+    restrict_path(path)?;
     Ok(())
 }
 
@@ -277,19 +431,6 @@ pub fn write_state(path: &std::path::Path, contents: &str) -> Result<(), String>
 pub fn pretty(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

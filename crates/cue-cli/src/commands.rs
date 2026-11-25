@@ -71,38 +71,36 @@ pub fn login(token: Option<&String>, base: Option<&String>) -> Result<String, St
     let user = client::call_json(&origin, USER_INFO, Some(token), &json!({}))
         .map_err(|e| format!("token rejected, nothing stored: {e}"))?;
 
-    let dir = crate::state_dir()?;
-    let path = dir.join("token");
-    crate::write_state(&path, token)?;
-    let base_path = dir.join("base");
-    crate::write_state(&base_path, &origin)?;
+    let paths = crate::state_paths()?;
+    paths.ensure()?;
+    crate::write_state(&paths.token, token)?;
+    crate::write_state(&paths.base, &origin)?;
 
     Ok(pretty(&json!({
-        "stored": path.display().to_string(),
+        "stored": paths.token.display().to_string(),
         "base": origin,
         "user": user.get("user").cloned().unwrap_or(Value::Null),
     })))
 }
 
 pub fn logout() -> Result<String, String> {
-    let dir = crate::state_dir()?;
-    let path = dir.join("token");
-    let existed = path.exists();
+    let paths = crate::state_paths()?;
+    let existed = paths.token.exists();
     if existed {
-        fs::remove_file(&path).map_err(|e| format!("remove {}: {e}", path.display()))?;
+        fs::remove_file(&paths.token)
+            .map_err(|e| format!("remove {}: {e}", paths.token.display()))?;
     }
-    Ok(json!({ "removed": existed, "path": path.display().to_string() }).to_string())
+    Ok(json!({ "removed": existed, "path": paths.token.display().to_string() }).to_string())
 }
 
 /// Persist a token only after the service proves it works.
 fn store_verified_token(origin: &str, token: &str) -> Result<Value, String> {
     let user = client::call_json(origin, USER_INFO, Some(token), &json!({}))
         .map_err(|e| format!("token rejected, nothing stored: {e}"))?;
-    let dir = crate::state_dir()?;
-    let path = dir.join("token");
-    crate::write_state(&path, token)?;
-    let base_path = dir.join("base");
-    crate::write_state(&base_path, origin)?;
+    let paths = crate::state_paths()?;
+    paths.ensure()?;
+    crate::write_state(&paths.token, token)?;
+    crate::write_state(&paths.base, origin)?;
     Ok(user)
 }
 
@@ -206,15 +204,18 @@ fn read_secret(label: &str) -> Result<String, String> {
     read_line(&format!("{label}: "))?.ok_or_else(|| format!("{label} is empty"))
 }
 
+/// The origin every command uses: a stored `login --base` value first, then
+/// `CUE_BASE_URL`, then the default. `doctor` calls this so its health check
+/// probes the same host the commands will actually use.
+pub fn resolve_origin() -> String {
+    base()
+}
+
 fn base() -> String {
-    let dir = crate::state_dir().ok();
-    let stored = dir
-        .and_then(|d| fs::read_to_string(d.join("base")).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    let stored = crate::state_paths().ok().and_then(|p| p.read_base());
     match stored {
         Some(b) => b,
-        None => client::DEFAULT_BASE.to_string(),
+        None => client::resolve_base_or_env().unwrap_or_else(|_| client::DEFAULT_BASE.to_string()),
     }
 }
 
@@ -268,19 +269,22 @@ pub fn agents(limit: Option<&String>) -> Result<String, String> {
     Ok(pretty(&value))
 }
 
-pub fn rpc(method: Option<&String>, body: Option<&String>) -> Result<String, String> {
+pub fn rpc(method: Option<&String>, args: &crate::cli::Args) -> Result<String, String> {
+    let payload: Value = crate::body::json_argument(args)?.unwrap_or_else(|| json!({}));
+    rpc_with_body(method, &payload)
+}
+
+/// Call any RPC with an already-parsed body. MCP tools arrive as JSON, not as a
+/// command line, so they cannot go through `cli::Args`.
+pub fn rpc_with_body(method: Option<&String>, payload: &Value) -> Result<String, String> {
     let method = method.ok_or("rpc requires <Service.Method> (e.g. user.v1.UserService/UserInfo)")?;
     let path = if method.starts_with('/') {
         method.clone()
     } else {
         format!("/{method}")
     };
-    let payload: Value = match body {
-        Some(b) => serde_json::from_str(b).map_err(|e| format!("--json is not valid JSON: {e}"))?,
-        None => json!({}),
-    };
     let token = client::stored_token();
-    let value = client::call_json(&base(), &path, token.as_deref(), &payload)?;
+    let value = client::call_json(&base(), &path, token.as_deref(), payload)?;
     // `rpc` is the escape hatch: an arbitrary response can carry a live token.
     Ok(pretty(&redact(&value)))
 }
@@ -305,13 +309,42 @@ pub fn raw(method: Option<&String>, hex: Option<&String>) -> Result<String, Stri
     ))
 }
 
+/// `cue methods` — report the static RPC inventory.
+///
+/// The inventory lives beside the source, not inside the binary, so the path is
+/// reported as given rather than as a host-absolute path: a published tool
+/// should not print the build machine's directory layout.
 pub fn methods() -> Result<String, String> {
+    let relative = "docs/rpc-inventory.txt";
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../docs/rpc-inventory.txt");
+        .join("../..")
+        .join(relative);
     let text = fs::read_to_string(&path)
-        .map_err(|e| format!("read {}: {e}", path.display()))?;
-    let count = text.lines().filter(|l| !l.trim().is_empty()).count();
-    Ok(json!({ "inventory": path.display().to_string(), "methods": count }).to_string())
+        .map_err(|e| format!("read {relative} (looked at {}): {e}", path.display()))?;
+    let count = text
+        .lines()
+        .filter(|l| l.trim().starts_with('/'))
+        .count();
+    Ok(json!({ "inventory": relative, "methods": count }).to_string())
+}
+
+/// The same inventory, counted and returned in full.
+///
+/// `methods` prints where the list lives; this returns the list, which is what a
+/// caller that cannot read the repository needs.
+pub fn methods_list() -> Result<String, String> {
+    let relative = "docs/rpc-inventory.txt";
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative);
+    let text = fs::read_to_string(&path)
+        .map_err(|e| format!("read {relative}: {e}"))?;
+    let rows: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with('/'))
+        .collect();
+    Ok(json!({ "inventory": relative, "count": rows.len(), "methods": rows }).to_string())
 }
 
 /// Namespace-level Socket.IO observation. Prints one line per frame; the
@@ -424,7 +457,7 @@ pub fn send(session_id: Option<&String>, text: Option<&String>, flags: &HashMap<
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     let cleaned: String = s.chars().filter(|c| !c.is_whitespace()).collect();
-    if cleaned.len() % 2 != 0 {
+    if !cleaned.len().is_multiple_of(2) {
         return Err("--bytes must have an even number of hex digits".into());
     }
     let mut out = Vec::with_capacity(cleaned.len() / 2);
@@ -469,7 +502,9 @@ pub fn discover(service: Option<&String>, methods: &[String]) -> Result<String, 
         match client::call_json(&origin, &path, None, &json!({})) {
             Ok(_) => rows.push(json!({ "method": method, "exists": true, "status": "ok" })),
             Err(err) => {
-                let exists = !(err.contains("HTTP 404") && !err.contains('['));
+                // A bare 404 means the route is absent; a 404 that carries a Connect
+                // body means the route exists and the record was not found.
+                let exists = !err.contains("HTTP 404") || err.contains('[');
                 rows.push(json!({ "method": method, "exists": exists, "detail": err }));
             }
         }
@@ -1023,6 +1058,8 @@ pub fn telecom() -> Result<String, String> {
     }
     Ok(pretty(&Value::Object(out)))
 }
+
+
 
 
 

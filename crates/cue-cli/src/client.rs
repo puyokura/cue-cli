@@ -11,7 +11,6 @@
 //! be read alongside the payload.
 
 use serde_json::Value;
-use std::fs;
 use std::time::Duration;
 
 /// Default service origin. `--base` and `CUE_BASE_URL` override it.
@@ -53,14 +52,7 @@ fn default_headers(token: Option<&str>) -> Vec<(String, String)> {
 
 /// Read the stored bearer token, if any.
 pub fn stored_token() -> Option<String> {
-    let path = super::state_dir().ok()?.join("token");
-    let raw = fs::read_to_string(path).ok()?;
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    super::state_paths().ok()?.read_token()
 }
 
 /// Resolve the origin from a flag override, then `CUE_BASE_URL`, then default.
@@ -179,6 +171,20 @@ pub fn call_proto(
     Ok(bytes)
 }
 
+/// Resolve the origin, or explain why it cannot be resolved.
+///
+/// `doctor` needs the reason rather than a silent default, so this returns a
+/// Result instead of falling back like `resolve_base` does.
+pub fn resolve_base_or_env() -> Result<String, String> {
+    if let Ok(b) = std::env::var("CUE_BASE_URL") {
+        let trimmed = b.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.trim_end_matches('/').to_string());
+        }
+    }
+    Ok(DEFAULT_BASE.to_string())
+}
+
 fn truncate(s: &str, max: usize) -> String {
     match s.char_indices().nth(max) {
         Some((idx, _)) => format!("{}…", &s[..idx]),
@@ -186,8 +192,6 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-/// Convenience: an empty JSON object.
-#[allow(dead_code)]
 /// GET one REST route under `/api/*` with the stored token.
 /// These routes are not Connect RPC and return plain JSON.
 pub fn get_rest(base: &str, path_and_query: &str, token: Option<&str>) -> Result<Value, String> {
@@ -218,6 +222,7 @@ pub fn get_rest(base: &str, path_and_query: &str, token: Option<&str>) -> Result
     }
     serde_json::from_str(&body).map_err(|e| format!("decode {path_and_query}: {e}"))
 }
+
 
 
 

@@ -13,6 +13,36 @@ use std::sync::{Arc, Mutex};
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 
+/// Constraints a caller needs before choosing tools.
+///
+/// A wrong first assumption costs a wasted turn: which surface carries what,
+/// where credentials live, and which commands change remote state. This is
+/// returned by `initialize`, so it is read before `tools/list`.
+pub const CUE_INSTRUCTIONS: &str = "\
+Cue (Cue+ by Manus) tools, an independent AGPL-3.0 client for the Cue service.
+
+Auth: the bearer token is reused from a state file (%APPDATA%/cue-cli, else \
+$XDG_CONFIG_HOME/cue-cli or ~/.config/cue-cli; override with CUE_STATE or \
+CUE_MCP_STATE). Call cue_doctor first. If it reports auth=fail, the user must run \
+`cue login` from a terminal: the login needs a phone number and an SMS code, so \
+it cannot be completed from a tool call.
+
+Surface: cue_rpc reaches every Connect RPC (JSON body), so an unimplemented \
+command is not a blocker. cue_coverage reports which surfaces were actually \
+verified against the live service; treat anything absent from it as unproven.
+
+Limits: cue_send and cue_new post a real prompt to a real account and wait for \
+the agent, so they are slow (tens of seconds) and leave a session behind. \
+cue_join blocks for its whole window. Prefer cue_rpc for reads.
+
+Destructive operations: publishing a site (cue webdev-deploy), disabling two-step \
+verification, and deleting a passkey change remote state. The CLI requires \
+--confirm for them; there is no MCP tool that skips that, so ask the user first.
+
+Secrets: no tool prints a token, a password, or a recovery code. Values are \
+replaced with {redacted: true, bytes: N}. An empty object from a read usually \
+means an empty state, not an error.";
+
 fn write_message(lock: &Arc<Mutex<()>>, value: &Value) {
     let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
     let mut stdout = std::io::stdout().lock();
@@ -41,6 +71,10 @@ fn tool(
 /// The tool surface mirrors the CLI commands that are non-interactive.
 fn tools() -> Value {
     json!([
+        tool("cue_doctor", "Check state, auth, and the service. Run this first.", json!({
+            "live": { "type": "boolean", "description": "also round-trip the service" }
+        }), vec![]),
+        tool("cue_status", "What the CLI thinks its own state is (state path, signed_in).", json!({}), vec![]),
         tool("cue_region", "Check region hints (public RPC, no token).", json!({}), vec![]),
         tool("cue_settings", "Read global settings (public RPC, no token).", json!({}), vec![]),
         tool("cue_whoami", "Read the signed-in user (needs a stored token).", json!({}), vec![]),
@@ -54,9 +88,10 @@ fn tools() -> Value {
         tool("cue_agents", "List agents on the account.", json!({
             "limit": { "type": "integer" }
         }), vec![]),
-        tool("cue_rpc", "Call any Connect RPC by path with a JSON body.", json!({
+        tool("cue_rpc", "Call any Connect RPC by path with a JSON body. A state-changing method needs \"confirm\": true.", json!({
             "method": { "type": "string", "description": "service.Method or /service.Method" },
-            "body": { "type": "object", "description": "request body (defaults to {})" }
+            "body": { "type": "object", "description": "request body (defaults to {})" },
+            "confirm": { "type": "boolean", "description": "required for a method that changes remote state" }
         }), vec!["method"]),
         tool("cue_send", "Join a session and post a prompt; returns what came back.", json!({
             "session_id": { "type": "string" },
@@ -97,6 +132,14 @@ fn arg_num(args: &Value, key: &str) -> Option<String> {
 
 fn call_tool(name: &str, args: &Value) -> Result<String, String> {
     match name {
+        "cue_doctor" => {
+            let live = args.get("live").and_then(Value::as_bool).unwrap_or(false);
+            let report = crate::doctor::run(live);
+            Ok(serde_json::to_string_pretty(&report.to_json(live))
+                .unwrap_or_else(|_| report.to_text(live)))
+        }
+        "cue_status" => Ok(serde_json::to_string_pretty(&crate::doctor::status())
+            .unwrap_or_else(|_| "{}".to_string())),
         "cue_region" => crate::commands::region(),
         "cue_settings" => crate::commands::settings(),
         "cue_whoami" => crate::commands::whoami(),
@@ -120,11 +163,21 @@ fn call_tool(name: &str, args: &Value) -> Result<String, String> {
         }
         "cue_rpc" => {
             let method = arg_str(args, "method").ok_or("method is required")?;
+            // The same gate as the CLI. A machine-facing caller is not trusted
+            // more than a human one; it has to say `confirm: true` for a
+            // state-changing method exactly as `--confirm` does.
+            if crate::body::state_changing_method(method)
+                && args.get("confirm").and_then(Value::as_bool) != Some(true)
+            {
+                return Err(format!(
+                    "{method} can change remote state; pass \"confirm\": true to call it"
+                ));
+            }
             let body = args
                 .get("body")
-                .map(|b| b.to_string())
-                .unwrap_or_else(|| "{}".to_string());
-            crate::commands::rpc(Some(&method.to_string()), Some(&body))
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            crate::commands::rpc_with_body(Some(&method.to_string()), &body)
         }
         "cue_send" => {
             let sid = arg_str(args, "session_id").ok_or("session_id is required")?;
@@ -228,10 +281,23 @@ pub fn serve() -> Result<String, String> {
                                 "name": "cue",
                                 "version": env!("CARGO_PKG_VERSION"),
                             },
+                            "instructions": CUE_INSTRUCTIONS,
                         },
                     }),
                 );
             }
+            // A liveness check the client may send at any time. It must answer
+            // even while a slow tool is running, which the threaded design
+            // already guarantees.
+            "ping" => {
+                write_message(
+                    &stdout_lock,
+                    &json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
+                );
+            }
+            // Notifications carry no id and are answered above; this arm keeps
+            // an explicit acknowledgement from being sent twice.
+            "notifications/initialized" | "initialized" => {}
             "tools/list" => {
                 write_message(
                     &stdout_lock,
@@ -310,9 +376,39 @@ mod tests {
     }
 
     #[test]
+    fn a_state_changing_rpc_needs_confirm() {
+        let err = call_tool(
+            "cue_rpc",
+            &json!({"method": "user.v1.UserAuthService/DeletePasskey", "body": {"id": "x"}}),
+        )
+        .unwrap_err();
+        assert!(err.contains("confirm"), "{err}");
+    }
+
+    #[test]
+    fn a_read_rpc_does_not_need_confirm() {
+        // Checked without a network call: the gate decision is the unit, not the
+        // request. A read must never demand confirmation.
+        for method in [
+            "user.v1.UserService/UserInfo",
+            "user.v1.UserService/GetAvailableCredits",
+            "session.v1.SessionService/ListSessions",
+        ] {
+            assert!(!crate::body::state_changing_method(method), "{method}");
+        }
+        for method in [
+            "user.v1.UserAuthService/DeletePasskey",
+            "cloud_pc.v1.CloudPCService/ResetSSHPassword",
+        ] {
+            assert!(crate::body::state_changing_method(method), "{method}");
+        }
+    }
+
+    #[test]
     fn missing_arguments_are_rejected() {
         assert!(call_tool("cue_session", &json!({})).is_err());
         assert!(call_tool("cue_rpc", &json!({})).is_err());
     }
 }
+
 

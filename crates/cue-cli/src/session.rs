@@ -45,7 +45,7 @@ pub struct Outcome {
 }
 
 pub fn run(plan: Plan<'_>, out: &mut dyn FnMut(&str)) -> Result<Outcome, String> {
-    let query = vec![
+    let query = [
         ("locale".to_string(), plan.locale.to_string()),
         ("tz".to_string(), "Asia/Tokyo".to_string()),
         ("clientType".to_string(), "CUE".to_string()),
@@ -257,7 +257,7 @@ fn record_event(name: &str, args: &Value, outcome: &mut Outcome, out: &mut dyn F
                     out(&format!("liveStatus {text}"));
                 }
             }
-            other => out(&format!("{other}")),
+            other => out(other),
         }
         return;
     }
@@ -324,5 +324,6 @@ fn urlencode(s: &str) -> String {
     }
     out
 }
+
 
 
