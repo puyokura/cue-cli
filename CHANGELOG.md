@@ -1,5 +1,61 @@
 # CHANGELOG
 
+## 0.1.1 — 2026-11-26
+
+安全性と操作性の修正版。0.1.0 の `--confirm` は「動詞の一覧に載っているものだけ」を
+止めていたため、一覧に無い書き込みが素通りしていた。判定を反転し、読み取りの一覧に
+載っているもの以外はすべて状態変更として扱う。サービスが新しい動詞を追加しても、
+コードを直さない限りゲートが漏れない。
+
+### 変更点
+
+- **`--confirm` の判定を反転**。`Get`/`List`/`Search`/`Page`/`Check`/`Query`/`View`/`Read`/
+  `User` で始まるメソッドだけを読み取りとし、それ以外は `--confirm` を要求する。
+  これで `ResetSSHPassword`、`Restart`、`AcceptInvite`、`VerifyEmail`、`SendCuePhoneCode`、
+  `RegenerateRecoveryCodes` などが止まる（0.1.0 では止まらなかった）。
+- **MCP `cue_rpc` も同じゲート**。状態変更メソッドは `"confirm": true` を要求する。
+  0.1.0 では MCP 経由だけゲートを迂回でき、`instructions` の「迂回できない」という記述が
+  実装と食い違っていた。
+- **本文による判定を撤去**。`--json` の本文に `updatedAt` のような語が含まれるだけで
+  読み取りが `--confirm` を要求し、しかも `--set` / `--json-file` / `--json -` では
+  同じ本文が検査されなかった。判定はメソッド名だけにする。
+- `phone reset` と `mfa codes` をゲート対象に追加（前者はパスワード変更、後者は
+  リカバリコードの再発行で、印刷済みのコードを無効化する）。
+- 値の無いフラグ（`--limit` だけ等）を「既定値で実行」ではなくエラーにする。
+  `--json` は `doctor`/`status` ではスイッチ、`rpc` では値必須として扱う。
+- `--state=DIR` をコマンド前でも受け付ける（`--state DIR` と同義。0.1.0 では
+  `unknown command: --state=…` になっていた）。
+- `doctor`/`status` が保存済みの `base` を尊重するようにした（0.1.0 は既定の接続先を
+  点検していたため、`login --base` した環境では別ホストを検査していた）。
+- `doctor` は失敗時に終了コード 1 を返す。`status` は状態ディレクトリを作らない。
+- `doctor` の `state` 項目がトークン欠如を `warn` として報告する（常に `ok` では点検にならない）。
+- 通信失敗・5xx は `identity` を `warn` とし、再ログインを促さない。4xx のみ `fail`。
+
+### 新機能
+
+- `doctor [--live] [--json]`：状態・認証・接続先を 6 項目で点検する。`--live` で実サービスまで往復。
+- `status [--json]`：この CLI が認識している状態を返す。
+- MCP ツール `cue_doctor` / `cue_status`、`initialize` の `instructions`、`ping` 応答。
+- `rpc` が `--set key=value`、`--json-file PATH`、`--json -`（stdin UTF-8）を受ける。
+  Windows PowerShell 5.1 が引用符を壊す環境でも本文を渡せる。
+- `--flag=value` 形式。`--text='-- leading dashes'` のように値がダッシュで始まる場合に必要。
+- 状態パスは `--state` > `CUE_STATE` > `CUE_MCP_STATE` > OS 既定。ディレクトリ指定とファイル指定の
+  両方を受け、ファイル指定時はそのファイルをトークンとして扱う。
+- `methods --list` が目録を全件返す。`methods` はホスト絶対パスを出さない。
+
+### 注意点
+
+- **`--confirm` の既定が厳しくなった**。読み取りの一覧に無い `rpc`/`raw` は
+  `--confirm` なしで拒否される。`Get`/`List` 等で始まらない読み取り系が将来現れた場合は、
+  `body.rs` の `READ_LEADERS` に追加する。判定を「読み取りの許可リスト」にしているのは、
+  新しい書き込みが既定で止まる方向に倒すため。
+- 未検証は 0.1.0 から変わらない：沙箱の VNC 画面転送、telecom の実番号契約、
+  webdev 以外のデプロイ、cloud_pc の解除（`StripeCloudComputerCancel`）、TOTP 登録
+  （サーバが 400279 で拒否）、パスキー登録の完了（端末の認証器が要る）、
+  Unix の 0700/0600（Windows ホストのため未実行、CI で実測）。詳細は `docs/coverage.md`。
+- `mfa codes` はリカバリコードを再発行する。`--confirm` を要求するが、実行すると
+  印刷済みのコードは無効になる。
+
 ## 0.1.0 — 2026-11-23
 
 最初の公開版。主要面を実サービスに対して実測した上で公開する。
@@ -38,16 +94,3 @@
 
 
 
-
-### 配布物の実測
-
-Release v0.1.0 に添付した 3 資産を取得して中身を確認した。
-
-| 資産 | 中身 | 形式 |
-|---|---|---|
-| `cue-linux-x86_64.tar.gz` | `cue`（3,463,368 B）+ README + LICENSE + CHANGELOG | ELF64, machine 0x3e (x86-64) |
-| `cue-macos-aarch64.tar.gz` | `cue`（3,018,080 B）+ README + LICENSE + CHANGELOG | Mach-O 64, cpu 0xc (arm64) |
-| `cue-windows-x86_64.zip` | `cue.exe`（3,232,256 B）+ README + LICENSE + CHANGELOG | PE、`cue version` が exit 0 で `cue 0.1.0` |
-
-Linux と macOS は開発ホスト（Windows）では実行できないため、形式の確認までで止めた。
-Windows 版は展開後に実際に起動して `version` を確認している。

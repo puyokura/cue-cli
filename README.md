@@ -1,6 +1,6 @@
 # rea-cue
 
-Cue（`ai.manus.agents`）の API を独立クライアントから扱うための解析成果物と CLI。
+Cue の API を独立クライアントから扱うための解析成果物と CLI。
 
 このリポジトリは、市販アプリのクライアント／自動化を自作する目的で、
 公開 APK（Cue+ by Manus 26.19.1）を静的解析し、実サービスへのリクエストで
@@ -53,6 +53,8 @@ cue webdev [--limit n]        # WebDev プロジェクト一覧（読み取り�
 cue webdev --detail <id>      # チェックポイント（versionId）を含む詳細
 cue webdev-deploy --project <id> --version <vid>   # 公開ドメインへデプロイ（外部公開）
 cue send <session_id> --text "やあ"   # 既存セッションに join_session + user_message
+cue status                    # この CLI が認識している状態（--json 可）
+cue doctor [--live] [--json]  # 状態・認証・接続先の点検
 cue mfa status                # 2FA の有効状態
 cue mfa totp-start            # 認証アプリ登録の開始（otpauthUri を返す）
 cue mfa totp-finish --flow <id> --code <6桁>
@@ -63,10 +65,17 @@ cue discover user.v1.UserAuthService GetMfaStatus CreateTotp   # ルート存在
 
 ### MCP サーバー
 
-`cue mcp` は stdio で動く MCP サーバーになる。`initialize` / `tools/list` / `tools/call` を実装し、
-ツールは CLI の非対話コマンドをそのまま公開する（`cue_region`、`cue_whoami`、`cue_sessions`、
-`cue_session`、`cue_agents`、`cue_rpc`、`cue_send`、`cue_join`、`cue_coverage`、`cue_mfa_status`、
-`cue_discover`）。
+`cue mcp` は stdio で動く MCP サーバーになる。`initialize` は `instructions` と
+プロトコル版を返し、`ping` に応答する。`tools/list` は 17 ツールを返す。
+
+```
+cue_doctor  cue_status  cue_region  cue_settings  cue_whoami  cue_coverage
+cue_sessions  cue_session  cue_agents  cue_rpc  cue_send  cue_new
+cue_join  cue_telecom  cue_sandbox  cue_mfa_status  cue_discover
+```
+
+`cue_rpc` は CLI と同じ `--confirm` 規則に従う。状態変更メソッドは
+`"confirm": true` を渡さないと実行されない（CLI の `--confirm` と同じ判定）。
 
 ```
 {
@@ -109,8 +118,8 @@ CI の Linux ジョブで初めて実測される）。トークンの値は標�
 
 ```
 cargo build --release          # ルートからビルドできる（ワークスペース）
-cargo test                     # 21/21 PASS（オフライン）
-python tests/run_smoke.py      # 68/68 PASS（実サービス、認証不要の範囲）
+cargo test                     # 50/50 PASS（オフライン）
+python tests/run_smoke.py      # 80/80 PASS（実サービス、認証不要の範囲）
 python tests/run_live.py       # 17 PASS / 2 SKIP / 0 FAIL（要ログイン、読み取りのみ）
 python tests/mcp_probe.py      # 遅いツールが読み取りループを塞がないこと
 python tests/check_docs.py     # 文書に書いた件数がファイルと一致すること
@@ -144,6 +153,9 @@ AGPL-3.0-or-later。全文は `LICENSE`、各ソースファイルの先頭に
 - 各商標はそれぞれの所有者に帰属する。サービスの利用には当該サービスの利用規約が適用される。
 - 同梱・参照している第三者コンポーネントのライセンスは `Cargo.lock` の各クレートに従う
   （本リポジトリのコードは MIT/Apache-2.0 のクレートを依存として使うのみで、取り込みはしていない）。
+
+
+
 
 
 
