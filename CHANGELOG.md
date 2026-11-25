@@ -30,7 +30,9 @@
 - MCP の `cue_discover` もゲート対象（CLI の `discover` と同じ規則）。
 - 読み取り接頭辞で始まるが資格情報や書き込み可能な URL を返すメソッド
   （`GetSessionFileUploadUrl` / `GetHelpCenterToken` / `GetEditSpaceSiteCode` など）は
-  読み取り扱いにしない。
+  読み取り扱いにしない。`GetBackupSuggestion` は公開読み取りなので除外する。
+- 状態パスが使えないとき（空の環境変数など）は「トークンが無い」ではなく
+  その理由を返す。`status` は `state_error` として同じ理由を含める。
 - コマンド後の `-h` もヘルプとして扱う（`webdev-deploy ... -h` が実行されていた）。
 - 不明なコマンドは `--help` 付きでも終了 2（誤字をヘルプ成功として扱わない）。
 - 空の `CUE_STATE` / `CUE_MCP_STATE` はエラー（既定ディレクトリへの暗黙フォールバックをやめた）。
@@ -108,6 +110,7 @@
   cloud_pc の生成、2FA の TOTP 登録（サーバが 400279 で拒否）、パスキー登録の完了（端末の認証器が要る）。
 - 認証は電話 + SMS のみ実測済み。メールは Turnstile、Google は実トークンが前提で未検証。
 - 本リポジトリは非公式の独立実装。サービスの規約は利用者自身の責任で確認すること。
+
 
 
 

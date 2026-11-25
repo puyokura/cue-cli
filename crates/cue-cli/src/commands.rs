@@ -225,6 +225,9 @@ fn base() -> String {
 }
 
 fn authed() -> Result<String, String> {
+    // Report a broken state path before blaming the token: "no token" when the
+    // path itself is unusable sends the caller to `login`, which cannot help.
+    crate::state_paths()?;
     client::stored_token().ok_or_else(|| "no token; run `cue login --token <value>`".to_string())
 }
 

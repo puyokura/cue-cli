@@ -216,7 +216,6 @@ const CREDENTIAL_MINTERS: &[&str] = &[
     "getgithubappinstallations",
     "getappinstallurl",
     "getappauthurl",
-    "getbackupsuggestion",
 ];
 
 /// Whether this RPC method changes remote state.
